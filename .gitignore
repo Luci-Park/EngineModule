@@ -1,0 +1,5 @@
+# Documentation
+*.md
+
+# Build Files
+build/
