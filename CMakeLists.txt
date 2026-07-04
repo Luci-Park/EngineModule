@@ -7,10 +7,12 @@ project(Engine
 
 option(ENGINE_WARNINGS_AS_ERRORS "treat compiler warnings as errors" ON)
 option(ENGINE_SANITIZE "enable sanitizers" OFF)
+option(ENGINE_SHARED "engine modules as dll" OFF)
 
 option(ENGINE_BUILD_RENDERING "build rendering module" ON)
 option(ENGINE_BUILD_SANDBOX "build sandbox" ON)
 option(ENGINE_BUILD_TESTS "build tests" ON)
+
 
 include(cmake/Sanitizers.cmake)
 include(cmake/CompilerWarnings.cmake)
