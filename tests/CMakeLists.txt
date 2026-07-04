@@ -4,6 +4,7 @@ add_executable(core_tests core/CoreTest.cpp)
 
 target_link_libraries(core_tests PRIVATE engine::core Catch2::Catch2WithMain)
 engine_set_warnings(core_tests)
+engine_target_pch(core_tests)
 
 include(CTest)
 include(Catch)
