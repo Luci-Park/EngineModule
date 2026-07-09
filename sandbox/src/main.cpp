@@ -1,4 +1,8 @@
+#include "SandboxApp.hpp"
+#include <engine/core/Run.hpp>
+
 int main()
 {
-    return 0;
+    SandboxApp app;
+    return engine::Run(app);
 }

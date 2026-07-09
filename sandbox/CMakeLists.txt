@@ -1,4 +1,7 @@
-add_executable(sandbox src/main.cpp)
+add_executable(sandbox
+    src/main.cpp
+    src/SandboxApp.cpp
+)
 target_link_libraries(sandbox PRIVATE engine::core)
 engine_set_warnings(sandbox)
 engine_apply_sanitizers(sandbox)

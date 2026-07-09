@@ -3,3 +3,6 @@
 
 # Build Files
 build/
+
+# ide
+.vs/
