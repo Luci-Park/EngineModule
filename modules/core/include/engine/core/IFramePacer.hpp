@@ -5,14 +5,13 @@ namespace engine
 {
     struct FrameStats;
 
-    // Frame pacing strategy. Called once at the end of every frame. Implementations
-    // decide whether/how long to stall so the loop hits a target cadence.
+    // pacing strategy. called end of each frame -> may stall to hit a cadence.
     class ENGINE_CORE_API IFramePacer
     {
     public:
         virtual ~IFramePacer() = default;
 
-        // Called at end of frame with the frame's stats. May block to cap frame rate.
+        // end of frame. may block to cap rate.
         virtual void EndFrame(const FrameStats& stats) = 0;
     };
 }

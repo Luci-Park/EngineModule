@@ -13,6 +13,13 @@ option(ENGINE_BUILD_RENDERING "build rendering module" ON)
 option(ENGINE_BUILD_SANDBOX "build sandbox" ON)
 option(ENGINE_BUILD_TESTS "build tests" ON)
 
+# profiler: default ON in Debug, OFF otherwise (single-config presets set the type at configure).
+set(_engine_profile_default OFF)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(_engine_profile_default ON)
+endif()
+option(ENGINE_PROFILE "enable the in-engine profiler" ${_engine_profile_default})
+
 
 include(cmake/Sanitizers.cmake)
 include(cmake/CompilerWarnings.cmake)

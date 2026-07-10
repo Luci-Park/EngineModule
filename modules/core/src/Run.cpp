@@ -3,23 +3,30 @@
 #include <engine/core/Application.hpp>
 #include <engine/core/FrameTimer.hpp>
 #include <engine/core/IFramePacer.hpp>
+#include <engine/core/profile/Profile.hpp>
 
 namespace engine
 {
-    int Run(Application& app)
+    int Run(Application &app)
     {
-        // OnShutdown must run even if init/update throws, so cleanup (files, GPU/audio
-        // handles) always happens. Rethrow after shutdown so the caller still sees the error.
+        app.OnInit();
+
+        // post-init: OnShutdown must run even if loop throws. rethrow after.
         try
         {
-            app.OnInit();
-
             FrameTimer timer;
             while (app.IsRunning())
             {
                 const float dt = timer.Tick();
-                app.OnUpdate(dt);
-                app.Pacer().EndFrame(timer.Stats());
+                {
+                    ENGINE_PROFILE_SCOPE("Update");
+                    app.OnUpdate(dt);
+                }
+                {
+                    ENGINE_PROFILE_SCOPE("Pace");
+                    app.Pacer().EndFrame(timer.Stats());
+                }
+                ENGINE_PROFILE_FRAME();
             }
         }
         catch (...)

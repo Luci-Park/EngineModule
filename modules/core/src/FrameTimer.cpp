@@ -11,20 +11,23 @@ namespace engine
     float FrameTimer::Tick()
     {
         const int64_t now = NowNs();
-        float dt = 0.0f;
-        if (m_started)
+
+        if (!m_started)
         {
-            dt = static_cast<float>(static_cast<double>(now - m_lastNs) * 1e-9);
+            m_started = true;
+            m_lastNs = now;
+            return 0.0f;
         }
+
+        const float dt = static_cast<float>(static_cast<double>(now - m_lastNs) * 1e-9);
         m_lastNs = now;
-        m_started = true;
 
         Push(dt);
 
         m_stats.dt = dt;
         m_stats.fps = (dt > 0.0f) ? (1.0f / dt) : 0.0f;
-        const float avgDt = (m_count > 0) ? (m_sum / static_cast<float>(m_count)) : 0.0f;
-        m_stats.avgFps = (avgDt > 0.0f) ? (1.0f / avgDt) : 0.0f;
+        const double avgDt = (m_count > 0) ? (m_sum / static_cast<double>(m_count)) : 0.0;
+        m_stats.avgFps = (avgDt > 0.0) ? static_cast<float>(1.0 / avgDt) : 0.0f;
         m_stats.minDt = m_min;
         m_stats.maxDt = m_max;
 
@@ -45,10 +48,10 @@ namespace engine
             ++m_count;
         }
 
-        m_sum += dt;
+        m_sum += static_cast<double>(dt);
         if (wasFull)
         {
-            m_sum -= evicted;
+            m_sum -= static_cast<double>(evicted);
         }
 
         if (m_count == 1)
@@ -58,17 +61,16 @@ namespace engine
             return;
         }
 
-        // If the evicted sample held the current extreme, the true new extreme could
-        // be anywhere in the window — fall back to a full rescan. Otherwise the
-        // incoming sample can only extend (never narrow) the existing min/max, O(1).
         if (wasFull && (evicted == oldMin || evicted == oldMax))
         {
             RescanMinMax();
         }
         else
         {
-            if (dt < m_min) m_min = dt;
-            if (dt > m_max) m_max = dt;
+            if (dt < m_min)
+                m_min = dt;
+            if (dt > m_max)
+                m_max = dt;
         }
     }
 
@@ -82,8 +84,10 @@ namespace engine
         for (uint32_t i = 1; i < n; ++i)
         {
             const float v = m_history[(start + i) % HISTORY_CAPACITY];
-            if (v < minDt) minDt = v;
-            if (v > maxDt) maxDt = v;
+            if (v < minDt)
+                minDt = v;
+            if (v > maxDt)
+                maxDt = v;
         }
         m_min = minDt;
         m_max = maxDt;

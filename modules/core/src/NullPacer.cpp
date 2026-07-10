@@ -2,10 +2,8 @@
 
 namespace engine
 {
-    // Out-of-line definition anchors the vtable in this TU and keeps the exported
-    // symbol pinned across the shared-library boundary.
-    void NullPacer::EndFrame(const FrameStats& /*stats*/)
+    // parameter commented because not used -> warning -> caught at parameter not used
+    void NullPacer::EndFrame(const FrameStats & /*stats*/)
     {
-        // no-op: uncapped
     }
 }

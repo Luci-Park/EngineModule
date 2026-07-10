@@ -5,10 +5,8 @@ namespace engine
 {
     class IFramePacer;
 
-    // Abstract application base. Subclass it, override the lifecycle hooks, hand it
-    // to engine::Run(). The base also holds loop-control state (running flag, pacer)
-    // because the loop is app-driven: the app decides when to Close() and which
-    // pacer is active.
+    // application base, to be overriden and sent to engine::Run()
+    // can control loop with running flag and pacer(for framerates)
     class ENGINE_CORE_API Application
     {
     public:
@@ -21,20 +19,16 @@ namespace engine
         virtual void OnSuspend() {}
         virtual void OnResume() {}
 
-        // Loop control (read by engine::Run).
         bool IsRunning() const { return m_running; }
         void Close() { m_running = false; }
 
-        // Pacing. Defaults to an uncapped NullPacer until SetPacer() is called;
-        // swappable at runtime (e.g. uncapped <-> fixed 30fps).
-        // Non-owning: pacer must outlive this Application (or outlive the next
-        // SetPacer()/Run() call, whichever is sooner). Never pass a temporary —
-        // `SetPacer(FixedRatePacer(30.0f))` leaves a dangling pointer.
-        IFramePacer& Pacer() const;
-        void SetPacer(IFramePacer& pacer) { m_pacer = &pacer; }
+        // framepacer = controls frames
+        // default = unfixed
+        IFramePacer &Pacer() const;
+        void SetPacer(IFramePacer &pacer) { m_pacer = &pacer; }
 
     private:
         bool m_running = true;
-        IFramePacer* m_pacer = nullptr;  // resolved to a shared default NullPacer in Pacer()
+        IFramePacer *m_pacer = nullptr;
     };
 }

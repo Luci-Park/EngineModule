@@ -3,10 +3,10 @@
 
 namespace engine
 {
-    // Default pacer: no cap, no stall. The loop runs as fast as it can.
+    // default pacer, unfixed
     class ENGINE_CORE_API NullPacer final : public IFramePacer
     {
     public:
-        void EndFrame(const FrameStats& stats) override;
+        void EndFrame(const FrameStats &stats) override;
     };
 }

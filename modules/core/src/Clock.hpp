@@ -3,7 +3,6 @@
 
 namespace engine
 {
-    // Private (src-only) monotonic clock helper shared by FrameTimer and the pacers
-    // that need raw nanosecond timestamps. Not part of the public API.
+    // current time in nanoseconds
     int64_t NowNs();
 }
