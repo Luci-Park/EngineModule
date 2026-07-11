@@ -8,6 +8,10 @@ add_executable(core_tests
     core/ProfileTest.cpp
     core/TypeIdTest.cpp
     core/EntityTest.cpp
+    core/StorageKindTest.cpp
+    core/ColumnTest.cpp
+    core/TableTest.cpp
+    core/SparseStorageTest.cpp
 )
 
 target_link_libraries(core_tests PRIVATE engine::core Catch2::Catch2WithMain)
