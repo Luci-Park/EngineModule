@@ -12,6 +12,7 @@ engine_add_module(core
     src/memory/PoolAllocator.cpp
     src/profile/Profile.cpp
     src/ecs/EntityAllocator.cpp
+    src/ecs/World.cpp
 )
 engine_apply_sanitizers(engine_core)
 if(MSVC)

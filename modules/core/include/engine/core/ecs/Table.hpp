@@ -16,12 +16,19 @@ namespace engine
     class Table
     {
     public:
+        // basic
         template <typename T>
         void AddColumn()
         {
-            const uint32_t seq = TypeIdOf<T>().m_seq;
+            AddColumn(TypeIdOf<T>().m_seq, std::make_unique<Column<T>>());
+        }
+
+        // used when column already exists elsewhere
+        void AddColumn(uint32_t seq, std::unique_ptr<IColumn> column)
+        {
             ENGINE_ASSERT(m_columns.find(seq) == m_columns.end(), "Table::AddColumn: column already present for this component");
-            m_columns.emplace(seq, std::make_unique<Column<T>>());
+            ENGINE_ASSERT(column->ComponentSeq() == seq, "Table::AddColumn: column type does not match seq key -- GetColumn<T> would static_cast to the wrong type");
+            m_columns.emplace(seq, std::move(column));
         }
 
         template <typename T>
@@ -35,6 +42,15 @@ namespace engine
         }
 
         bool HasColumn(uint32_t seq) const { return m_columns.find(seq) != m_columns.end(); }
+
+        // used only when caller doesn't know each column's T
+        IColumn *FindColumn(uint32_t seq)
+        {
+            auto it = m_columns.find(seq);
+            return it == m_columns.end() ? nullptr : it->second.get();
+        }
+
+        const std::unordered_map<uint32_t, std::unique_ptr<IColumn>> &Columns() const { return m_columns; }
 
         std::size_t RowCount() const { return m_entities.size(); }
 
@@ -68,6 +84,43 @@ namespace engine
             m_entities.pop_back();
 
             return result;
+        }
+
+        // return the entity moved into srcRow
+        Entity MoveRowTo(std::size_t srcRow, Table &dst)
+        {
+            ENGINE_ASSERT(srcRow < m_entities.size(), "Table::MoveRowTo: row out of range");
+
+            const std::size_t last = m_entities.size() - 1;
+            const bool moved = srcRow != last;
+            const Entity displaced = moved ? m_entities[last] : NULL_ENTITY;
+
+            const std::size_t neededEntities = dst.m_entities.size() + 1;
+            if (dst.m_entities.capacity() < neededEntities)
+            {
+                const std::size_t grown = dst.m_entities.capacity() == 0 ? neededEntities : dst.m_entities.capacity() * 2;
+                dst.m_entities.reserve(grown < neededEntities ? neededEntities : grown);
+            }
+            for (auto &[seq, column] : m_columns)
+            {
+                if (IColumn *dstColumn = dst.FindColumn(seq))
+                    dstColumn->Reserve(1);
+            }
+
+            dst.m_entities.push_back(m_entities[srcRow]);
+            for (auto &[seq, column] : m_columns)
+            {
+                if (IColumn *dstColumn = dst.FindColumn(seq))
+                    column->MoveRowTo(srcRow, *dstColumn);
+                else
+                    column->SwapRemove(srcRow);
+            }
+
+            if (moved)
+                m_entities[srcRow] = m_entities[last];
+            m_entities.pop_back();
+
+            return displaced;
         }
 
         // debug: every column Size()==RowCount(); no duplicate live entity

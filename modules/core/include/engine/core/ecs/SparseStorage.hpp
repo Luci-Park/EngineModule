@@ -20,13 +20,14 @@ namespace engine
         virtual void Remove(Entity e) = 0; // no-op if absent
         virtual bool Contains(Entity e) const = 0;
         virtual std::size_t Size() const = 0;
+        virtual Entity DenseEntityAt(std::size_t denseIndex) const = 0;
+        virtual void Validate() const = 0; // debug: sparse<->dense bijection intact
     };
 
     template <typename T>
     class SparseStorage final : public ISparseStorage
     {
-        // Remove relocates the tail element by move -> a throwing move would desync the parallel
-        // dense arrays. require nothrow moves (same stance as Column).
+        // throw before change happens
         static_assert(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_assignable_v<T>,
                       "ECS component T must be nothrow-movable");
 
@@ -40,8 +41,7 @@ namespace engine
             EnsureSparseCapacity(e.m_index);
 
             const uint32_t dense = m_sparse[e.m_index];
-            // if slot already occupied -> override
-            // therefore no need to control generation for components, overriding will take care of the new component
+
             if (dense != INVALID)
             {
                 m_dense[dense] = std::move(value);
@@ -50,10 +50,6 @@ namespace engine
                 return;
             }
 
-            // reserve all three parallel arrays first (the only throwing step); then the appends
-            // are noexcept and the sparse write (the commit) happens last -> Insert is
-            // all-or-nothing. Setting m_sparse before the pushes could throw would leave it
-            // pointing at a dense slot that doesn't exist yet.
             ReserveDenseOneMore();
             const uint32_t newDense = static_cast<uint32_t>(m_dense.size());
             m_dense.push_back(std::move(value));
@@ -110,7 +106,13 @@ namespace engine
 
         std::size_t Size() const override { return m_dense.size(); }
 
-        void Validate() const
+        Entity DenseEntityAt(std::size_t denseIndex) const override
+        {
+            ENGINE_ASSERT(denseIndex < m_entities.size(), "SparseStorage::DenseEntityAt: index out of range");
+            return m_entities[denseIndex];
+        }
+
+        void Validate() const override
         {
 #ifndef NDEBUG
             ENGINE_ASSERT(m_dense.size() == m_meta.size() && m_dense.size() == m_entities.size(),
@@ -135,14 +137,12 @@ namespace engine
             }
         }
 
-        // reserve room for one more across the three dense arrays, growing geometrically so
-        // repeated inserts stay amortized O(1). front-loads the only allocation.
         void ReserveDenseOneMore()
         {
             const std::size_t needed = m_dense.size() + 1;
             if (m_dense.capacity() < needed || m_meta.capacity() < needed || m_entities.capacity() < needed)
             {
-                const std::size_t grown  = m_dense.capacity() == 0 ? 1 : m_dense.capacity() * 2;
+                const std::size_t grown = m_dense.capacity() == 0 ? 1 : m_dense.capacity() * 2;
                 const std::size_t target = grown < needed ? needed : grown;
                 m_dense.reserve(target);
                 m_meta.reserve(target);
@@ -150,7 +150,7 @@ namespace engine
             }
         }
 
-        std::vector<uint32_t> m_sparse;    // entity index -> dense index, or INVALID
+        std::vector<uint32_t> m_sparse;    // entity index -> dense index, or invalid
         std::vector<T> m_dense;            // packed
         std::vector<ComponentMeta> m_meta; // parallel to m_dense
         std::vector<Entity> m_entities;    // dense index -> entity (carries generation)

@@ -12,6 +12,7 @@ add_executable(core_tests
     core/ColumnTest.cpp
     core/TableTest.cpp
     core/SparseStorageTest.cpp
+    core/WorldTest.cpp
 )
 
 target_link_libraries(core_tests PRIVATE engine::core Catch2::Catch2WithMain)

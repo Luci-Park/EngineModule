@@ -20,24 +20,22 @@ namespace engine
 
         virtual void SwapRemove(std::size_t row) = 0;              // destroy row, fill it by moving in last row
         virtual void MoveRowTo(std::size_t row, IColumn &dst) = 0; // append row to dst, then SwapRemove(row) here
+        virtual void Reserve(std::size_t additional) = 0;
         virtual std::size_t Size() const = 0;
-        virtual uint32_t ComponentSeq() const = 0;               // TypeIdOf<T>().m_seq -- identity + MoveRowTo type guard
-        virtual std::unique_ptr<IColumn> CloneEmpty() const = 0; // empty Column<T> of the same T
+        virtual uint32_t ComponentSeq() const = 0;
+        virtual std::unique_ptr<IColumn> CloneEmpty() const = 0;
     };
 
     template <typename T>
     class Column final : public IColumn
     {
         // rows get relocated by SwapRemove/MoveRowTo -> a throwing move would desync the parallel
-        // m_data/m_meta or leave a row half-moved. require nothrow moves so relocation is total.
         static_assert(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_assignable_v<T>,
                       "ECS component T must be nothrow-movable");
 
     public:
         void Push(T value, ComponentMeta meta = {})
         {
-            // reserve both arrays first (the only throwing step); after it the appends can't
-            // realloc and the nothrow move makes them noexcept -> Push is all-or-nothing.
             ReserveOneMore();
             m_data.push_back(std::move(value));
             m_meta.push_back(meta);
@@ -82,13 +80,25 @@ namespace engine
             ENGINE_ASSERT(row < m_data.size(), "Column::MoveRowTo: row out of range");
 
             auto &typedDst = static_cast<Column<T> &>(dst);
-            // grow dst BEFORE touching the source: reserve is the only throwing step, and on
-            // throw both columns are untouched. after it the appends are noexcept (reserved +
-            // nothrow move) and SwapRemove is noexcept -> the source is never left half-moved.
+
+            // growing dst should happen before changing source
+            // change will not happen on exception at ReserveOneMore()
             typedDst.ReserveOneMore();
             typedDst.m_data.push_back(std::move(m_data[row]));
             typedDst.m_meta.push_back(m_meta[row]);
             SwapRemove(row);
+        }
+
+        void Reserve(std::size_t additional) override
+        {
+            const std::size_t needed = m_data.size() + additional;
+            if (m_data.capacity() < needed || m_meta.capacity() < needed)
+            {
+                const std::size_t grown = m_data.capacity() == 0 ? needed : m_data.capacity() * 2;
+                const std::size_t target = grown < needed ? needed : grown;
+                m_data.reserve(target);
+                m_meta.reserve(target);
+            }
         }
 
         std::size_t Size() const override { return m_data.size(); }
@@ -98,14 +108,13 @@ namespace engine
         std::unique_ptr<IColumn> CloneEmpty() const override { return std::make_unique<Column<T>>(); }
 
     private:
-        // reserve room for one more in both arrays, growing geometrically so repeated appends
-        // stay amortized O(1). front-loads the only allocation so later moves can't realloc.
+        // reserve room for both arrays
         void ReserveOneMore()
         {
             const std::size_t needed = m_data.size() + 1;
             if (m_data.capacity() < needed || m_meta.capacity() < needed)
             {
-                const std::size_t grown  = m_data.capacity() == 0 ? 1 : m_data.capacity() * 2;
+                const std::size_t grown = m_data.capacity() == 0 ? 1 : m_data.capacity() * 2;
                 const std::size_t target = grown < needed ? needed : grown;
                 m_data.reserve(target);
                 m_meta.reserve(target);

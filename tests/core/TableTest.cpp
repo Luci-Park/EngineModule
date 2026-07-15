@@ -2,6 +2,7 @@
 
 #include <engine/core/ecs/Entity.hpp>
 #include <engine/core/ecs/Table.hpp>
+#include <engine/core/ecs/TypeId.hpp>
 
 using namespace engine;
 
@@ -135,4 +136,82 @@ TEST_CASE("Table EntityAt is correct after a sequence of removals", "[core][ecs]
     // remaining entities: e3, e4, e2 in some swap-remove-determined order; just check no dups
     // and every column stays in lockstep with row count (already asserted by Validate()).
     REQUIRE(table.GetColumn<Position>()->Size() == 3);
+}
+
+TEST_CASE("Table MoveRowTo moves a multi-column row into a matching-column table", "[core][ecs][storage]")
+{
+    Table src;
+    src.AddColumn<Position>();
+    src.AddColumn<Velocity>();
+
+    Table dst;
+    dst.AddColumn<Position>();
+    dst.AddColumn<Velocity>();
+
+    Entity e0 = MakeEntity(0);
+    Entity e1 = MakeEntity(1);
+
+    src.AddEntity(e0);
+    src.GetColumn<Position>()->Push(Position{0.0f});
+    src.GetColumn<Velocity>()->Push(Velocity{0.0f});
+
+    src.AddEntity(e1);
+    src.GetColumn<Position>()->Push(Position{1.0f});
+    src.GetColumn<Velocity>()->Push(Velocity{10.0f});
+
+    Entity displaced = src.MoveRowTo(0, dst); // e1 fills the hole left by e0
+
+    REQUIRE(displaced == e1);
+    REQUIRE(src.RowCount() == 1);
+    REQUIRE(src.EntityAt(0) == e1);
+    REQUIRE(dst.RowCount() == 1);
+    REQUIRE(dst.EntityAt(0) == e0);
+    REQUIRE(dst.GetColumn<Position>()->Get(0).m_x == 0.0f);
+    REQUIRE(dst.GetColumn<Velocity>()->Get(0).m_dx == 0.0f);
+    src.Validate();
+    dst.Validate();
+}
+
+TEST_CASE("Table MoveRowTo returns NULL_ENTITY when the moved row was last", "[core][ecs][storage]")
+{
+    Table src;
+    src.AddColumn<Position>();
+    Table dst;
+    dst.AddColumn<Position>();
+
+    Entity e0 = MakeEntity(0);
+    src.AddEntity(e0);
+    src.GetColumn<Position>()->Push(Position{5.0f});
+
+    Entity displaced = src.MoveRowTo(0, dst);
+
+    REQUIRE(displaced.IsNull());
+    REQUIRE(src.RowCount() == 0);
+    REQUIRE(dst.RowCount() == 1);
+    REQUIRE(dst.GetColumn<Position>()->Get(0).m_x == 5.0f);
+    src.Validate();
+    dst.Validate();
+}
+
+TEST_CASE("Table MoveRowTo drops a column dst doesn't have (remove case)", "[core][ecs][storage]")
+{
+    Table src;
+    src.AddColumn<Position>();
+    src.AddColumn<Velocity>(); // dropped on the move
+
+    Table dst;
+    dst.AddColumn<Position>();
+
+    Entity e0 = MakeEntity(0);
+    src.AddEntity(e0);
+    src.GetColumn<Position>()->Push(Position{3.0f});
+    src.GetColumn<Velocity>()->Push(Velocity{7.0f});
+
+    src.MoveRowTo(0, dst);
+
+    REQUIRE(dst.RowCount() == 1);
+    REQUIRE(dst.HasColumn(TypeIdOf<Position>().m_seq));
+    REQUIRE_FALSE(dst.HasColumn(TypeIdOf<Velocity>().m_seq));
+    REQUIRE(dst.GetColumn<Position>()->Get(0).m_x == 3.0f);
+    dst.Validate();
 }
