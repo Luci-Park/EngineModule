@@ -3,7 +3,7 @@
 
 namespace engine
 {
-    // change-detection ticks, to be implemented later
+    // change-detection -> set by world on add/overwrite/mutate
     struct ComponentMeta
     {
         uint32_t m_changedTick = 0;

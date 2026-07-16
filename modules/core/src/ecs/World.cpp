@@ -42,6 +42,10 @@ namespace engine
 
     std::size_t World::EntityCount() const { return m_entities.AliveCount(); }
 
+    uint32_t World::CurrentTick() const { return m_currentTick; }
+
+    void World::AdvanceTick() { ++m_currentTick; }
+
     uint64_t World::HashSignature(const std::vector<uint32_t> &signature) const
     {
         // hashing through 32-bit FNV-1a

@@ -13,6 +13,7 @@ add_executable(core_tests
     core/TableTest.cpp
     core/SparseStorageTest.cpp
     core/WorldTest.cpp
+    core/ChangeDetectionTest.cpp
 )
 
 target_link_libraries(core_tests PRIVATE engine::core Catch2::Catch2WithMain)
