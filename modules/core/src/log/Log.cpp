@@ -1,3 +1,12 @@
+/**
+ * @file Log.cpp
+ * @author sumin.park
+ * @brief Logging backend setup, sink configuration and level routing.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/log/Log.hpp>
 
 #include <engine/core/log/Assert.hpp>
@@ -73,7 +82,7 @@ namespace engine
 
         void Log(LogLevel level, const char *file, int line, std::string_view msg)
         {
-            // "{}" for pre-formatting
+            // pre-formatted, passed as a "{}" arg -> braces in the payload are never re-parsed
             spdlog::default_logger_raw()->log(
                 spdlog::source_loc{file, line, ""}, ToSpd(level), "{}", msg);
         }
@@ -91,7 +100,6 @@ namespace engine
                 logger->log(spdlog::source_loc{file, line, ""}, spdlog::level::critical,
                             "Assertion failed: ({}) {}", expr, msg);
             }
-            // explicit flush
             logger->flush();
         }
     }

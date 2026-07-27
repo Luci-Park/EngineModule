@@ -17,7 +17,7 @@ engine_add_module(core
 engine_apply_sanitizers(engine_core)
 if(MSVC)
     # EntityAllocator's private STL members trip C4251 under ENGINE_SHARED; spdlog's interface
-    # flags happen to suppress it today -- make the suppression explicit (see ENGINE_RULES.md)
+    # flags happen to suppress it today; make the suppression explicit (see ENGINE_RULES.md)
     target_compile_options(engine_core PRIVATE /wd4251)
 endif()
 

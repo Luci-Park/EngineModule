@@ -1,3 +1,12 @@
+/**
+ * @file PoolAllocator.hpp
+ * @author sumin.park
+ * @brief Fixed-size block allocator with an intrusive free list.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/memory/IAllocator.hpp>
 #include <engine/core/memory/Memory.hpp>
@@ -6,7 +15,7 @@
 
 namespace engine
 {
-    // fixed-size recycled blocks, intrusive free-lis
+    // fixed-size recycled blocks, intrusive free-list
     class ENGINE_CORE_API PoolAllocator final : public IAllocator
     {
     public:

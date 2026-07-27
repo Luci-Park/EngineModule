@@ -1,3 +1,12 @@
+/**
+ * @file PoolAllocator.cpp
+ * @author sumin.park
+ * @brief Fixed-size block pool implementation.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/memory/PoolAllocator.hpp>
 #include "Align.hpp"
 

@@ -1,3 +1,12 @@
+/**
+ * @file Clock.cpp
+ * @author sumin.park
+ * @brief Monotonic clock source backing frame timing and profiling.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include "Clock.hpp"
 
 #include <chrono>

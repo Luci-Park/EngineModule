@@ -1,3 +1,12 @@
+/**
+ * @file Log.hpp
+ * @author sumin.park
+ * @brief Logging macros and configuration over a private backend.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 
@@ -28,7 +37,7 @@ namespace engine
         std::size_t maxFiles = 3;
     };
 
-    // install/replace logger
+    // last call wins; not idempotent, call before spawning threads
     ENGINE_CORE_API void InitLog(const LogConfig &config = {});
 
     // INFO/DEBUG not auto-flushed
@@ -36,7 +45,6 @@ namespace engine
 
     namespace detail
     {
-        // check log level
         ENGINE_CORE_API bool ShouldLog(LogLevel level);
         ENGINE_CORE_API void Log(LogLevel level, const char *file, int line, std::string_view msg);
         ENGINE_CORE_API void LogAssert(const char *file, int line, const char *expr, std::string_view msg);

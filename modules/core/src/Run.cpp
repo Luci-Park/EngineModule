@@ -1,3 +1,12 @@
+/**
+ * @file Run.cpp
+ * @author sumin.park
+ * @brief The engine frame loop: init, per-frame update and pace, then shutdown.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/Run.hpp>
 
 #include <engine/core/Application.hpp>

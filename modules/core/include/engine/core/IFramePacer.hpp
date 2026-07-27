@@ -1,3 +1,12 @@
+/**
+ * @file IFramePacer.hpp
+ * @author sumin.park
+ * @brief Frame pacing strategy interface, invoked at the end of every frame.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 
@@ -11,7 +20,6 @@ namespace engine
     public:
         virtual ~IFramePacer() = default;
 
-        // end of frame. may block to cap rate.
         virtual void EndFrame(const FrameStats& stats) = 0;
     };
 }

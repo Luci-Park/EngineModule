@@ -1,3 +1,12 @@
+/**
+ * @file Assert.hpp
+ * @author sumin.park
+ * @brief Assertion macros that log and break, compiled out in Release.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/log/Log.hpp>
 

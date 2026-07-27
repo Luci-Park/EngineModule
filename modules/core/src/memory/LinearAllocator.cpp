@@ -1,3 +1,12 @@
+/**
+ * @file LinearAllocator.cpp
+ * @author sumin.park
+ * @brief Bump-pointer arena implementation.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/memory/LinearAllocator.hpp>
 #include "Align.hpp"
 

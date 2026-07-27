@@ -1,3 +1,12 @@
+/**
+ * @file Platform.hpp
+ * @author sumin.park
+ * @brief Compile-time platform detection macros; the only place raw OS macros are read.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 
 #if defined(_WIN32)

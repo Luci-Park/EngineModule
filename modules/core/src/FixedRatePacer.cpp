@@ -1,3 +1,12 @@
+/**
+ * @file FixedRatePacer.cpp
+ * @author sumin.park
+ * @brief Fixed-rate pacing: sleep to a margin, then spin to the frame deadline.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/FixedRatePacer.hpp>
 #include <engine/core/FrameTimer.hpp>
 #include "Clock.hpp"
@@ -9,7 +18,7 @@ namespace engine
 {
     namespace
     {
-        // sleep to margin, spin the rest
+        // sleep stops this far short of the deadline; the rest is spun
         constexpr int64_t SPIN_MARGIN_NS = 2'000'000; // 2ms
     }
 
@@ -25,11 +34,9 @@ namespace engine
 
     void FixedRatePacer::EndFrame(const FrameStats & /*stats*/)
     {
-        // target time per frame
         const int64_t budgetNs = static_cast<int64_t>(1'000'000'000.0 / static_cast<double>(m_targetFps));
         const int64_t now = NowNs();
 
-        // first frame, just advance
         if (!m_armed)
         {
             m_deadlineNs = now + budgetNs;
@@ -37,10 +44,9 @@ namespace engine
             return;
         }
 
-        // the frame should end at
         m_deadlineNs += budgetNs;
 
-        // if pace fell behind, resync instead of spinning
+        // behind schedule -> resync rather than burn the whole frame catching up
         if (m_deadlineNs < now)
         {
             m_deadlineNs = now + budgetNs;

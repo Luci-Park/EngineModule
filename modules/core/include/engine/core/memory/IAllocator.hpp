@@ -1,3 +1,12 @@
+/**
+ * @file IAllocator.hpp
+ * @author sumin.park
+ * @brief Allocator interface shared by the engine's arena types.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 

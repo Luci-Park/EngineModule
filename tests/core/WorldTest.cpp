@@ -42,7 +42,6 @@ struct engine::ComponentStorageKind<Tag>
     static constexpr StorageKind VALUE = StorageKind::SparseSet;
 };
 
-// --- chunk 1: skeleton + entity lifecycle ----------------------------------
 
 TEST_CASE("World Spawn/Despawn/IsAlive", "[core][ecs][world]")
 {
@@ -88,7 +87,6 @@ TEST_CASE("World Despawn on a dead entity is a safe no-op", "[core][ecs][world]"
     world.Validate();
 }
 
-// --- chunk 3: table-component add/remove/get/has + archetype transitions --
 
 TEST_CASE("World AddComponent creates and reuses archetypes", "[core][ecs][world]")
 {
@@ -153,7 +151,7 @@ TEST_CASE("World RemoveComponent-absent / Get-absent / Has-absent are safe", "[c
     Entity a = world.Spawn();
     world.AddComponent(a, Position{1.0f});
 
-    world.RemoveComponent<Velocity>(a); // never had it -- no-op
+    world.RemoveComponent<Velocity>(a); // never had it; no-op
     REQUIRE(world.GetComponent<Velocity>(a) == nullptr);
     REQUIRE_FALSE(world.HasComponent<Velocity>(a));
     world.Validate();
@@ -173,7 +171,6 @@ TEST_CASE("World component ops on a dead entity are safe no-ops", "[core][ecs][w
     world.Validate();
 }
 
-// --- chunk 4: sparse routing -------------------------------------------------
 
 TEST_CASE("World routes SparseSet components without changing the archetype", "[core][ecs][world]")
 {
@@ -187,7 +184,7 @@ TEST_CASE("World routes SparseSet components without changing the archetype", "[
 
     REQUIRE(world.HasComponent<Tag>(a));
     REQUIRE(world.GetComponent<Tag>(a)->m_value == 42);
-    // table component must still be reachable -- sparse add must not have transitioned the entity
+    // table component must still be reachable; sparse add must not have transitioned the entity
     REQUIRE(world.HasComponent<Position>(a));
     REQUIRE(world.GetComponent<Position>(a)->m_x == 1.0f);
 }
@@ -202,12 +199,11 @@ TEST_CASE("World Despawn removes sparse components too", "[core][ecs][world]")
 
     Entity b = world.Spawn();
     world.AddComponent(b, Tag{2});
-    REQUIRE_FALSE(world.HasComponent<Tag>(a)); // dead entity -- false regardless
+    REQUIRE_FALSE(world.HasComponent<Tag>(a)); // dead entity; false regardless
     REQUIRE(world.HasComponent<Tag>(b));
     world.Validate();
 }
 
-// --- chunk 5: convenience Spawn(Ts...) ---------------------------------------
 
 TEST_CASE("World Spawn(Ts...) builds the {a,b} archetype directly", "[core][ecs][world]")
 {
@@ -221,7 +217,6 @@ TEST_CASE("World Spawn(Ts...) builds the {a,b} archetype directly", "[core][ecs]
     REQUIRE(world.GetComponent<Velocity>(a)->m_dx == 6.0f);
 }
 
-// --- chunk 6: randomized property test ---------------------------------------
 
 TEST_CASE("World property: random spawn/add/remove/despawn preserves invariants", "[core][ecs][world]")
 {

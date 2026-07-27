@@ -1,3 +1,12 @@
+/**
+ * @file Application.hpp
+ * @author sumin.park
+ * @brief Application base class the game overrides and hands to engine::Run.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 
@@ -5,8 +14,7 @@ namespace engine
 {
     class IFramePacer;
 
-    // application base, to be overriden and sent to engine::Run()
-    // can control loop with running flag and pacer(for framerates)
+    // application base; override and hand to engine::Run()
     class ENGINE_CORE_API Application
     {
     public:
@@ -22,8 +30,7 @@ namespace engine
         bool IsRunning() const { return m_running; }
         void Close() { m_running = false; }
 
-        // framepacer = controls frames
-        // default = unfixed
+        // lazy shared default -> NullPacer, so this never returns null
         IFramePacer &Pacer() const;
         void SetPacer(IFramePacer &pacer) { m_pacer = &pacer; }
 

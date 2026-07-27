@@ -1,3 +1,12 @@
+/**
+ * @file EntityAllocator.cpp
+ * @author sumin.park
+ * @brief Entity slot allocation, FIFO reuse and generation retirement.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/ecs/EntityAllocator.hpp>
 #include <engine/core/log/Assert.hpp>
 
@@ -53,5 +62,10 @@ namespace engine
     std::size_t EntityAllocator::AliveCount() const
     {
         return m_aliveCount;
+    }
+
+    std::size_t EntityAllocator::SlotCount() const
+    {
+        return m_generations.size();
     }
 }

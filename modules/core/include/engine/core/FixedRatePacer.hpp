@@ -1,3 +1,12 @@
+/**
+ * @file FixedRatePacer.hpp
+ * @author sumin.park
+ * @brief Frame pacer that caps the loop to a target frame rate.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/IFramePacer.hpp>
 
@@ -5,7 +14,6 @@
 
 namespace engine
 {
-    // caps to target fps
     class ENGINE_CORE_API FixedRatePacer final : public IFramePacer
     {
     public:

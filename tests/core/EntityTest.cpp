@@ -66,7 +66,7 @@ TEST_CASE("Free on an already-stale entity is a safe no-op", "[core][ecs][entity
     Entity          a = alloc.Allocate();
 
     alloc.Free(a);
-    alloc.Free(a); // second free of the same stale handle -- must not double-decrement
+    alloc.Free(a); // second free of the same stale handle; must not double-decrement
     REQUIRE(alloc.AliveCount() == 0);
 }
 
@@ -121,7 +121,7 @@ TEST_CASE("retired slot (generation exhausted) is never handed out again", "[cor
     alloc.Free(forged);
     REQUIRE(alloc.AliveCount() == 0);
 
-    // slot must not come back from the free list -- next Allocate uses a fresh index
+    // slot must not come back from the free list; next Allocate uses a fresh index
     Entity next = alloc.Allocate();
     REQUIRE(next.m_index != a.m_index);
 }
@@ -131,7 +131,7 @@ TEST_CASE("property: N random Allocate/Free sequences preserve allocator invaria
     EntityAllocator          alloc;
     std::unordered_set<uint64_t> liveKeys; // (index,generation) packed
     std::vector<Entity>      liveHandles;
-    std::vector<Entity>      staleHandles; // freed handles -- must stay dead forever
+    std::vector<Entity>      staleHandles; // freed handles; must stay dead forever
 
     auto pack = [](Entity e) -> uint64_t
     {
@@ -166,7 +166,7 @@ TEST_CASE("property: N random Allocate/Free sequences preserve allocator invaria
             staleHandles.push_back(e);
         }
 
-        // invariants after every op -- both directions of IsAlive <=> tracked-live set
+        // invariants after every op; both directions of IsAlive <=> tracked-live set
         // (stale sweep bounded to the most recent frees per op; full sweep once at the end,
         //  else the test goes quadratic in Catch2 REQUIRE overhead)
         REQUIRE(alloc.AliveCount() == liveHandles.size());

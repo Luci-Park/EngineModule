@@ -1,3 +1,12 @@
+/**
+ * @file FrameTimer.cpp
+ * @author sumin.park
+ * @brief Frame delta measurement and rolling min, max and average statistics.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/FrameTimer.hpp>
 #include "Clock.hpp"
 

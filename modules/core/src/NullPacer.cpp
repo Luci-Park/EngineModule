@@ -1,9 +1,17 @@
+/**
+ * @file NullPacer.cpp
+ * @author sumin.park
+ * @brief Uncapped pacer implementation.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/NullPacer.hpp>
 
 namespace engine
 {
-    // parameter commented because not used -> warning -> caught at parameter not used
-    void NullPacer::EndFrame(const FrameStats & /*stats*/)
+    void NullPacer::EndFrame(const FrameStats & /*stats*/) // unnamed -> no unused-param warning under /WX
     {
     }
 }

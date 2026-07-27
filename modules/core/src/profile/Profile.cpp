@@ -1,3 +1,12 @@
+/**
+ * @file Profile.cpp
+ * @author sumin.park
+ * @brief Profiling event buffers and per-frame zone aggregation.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/profile/Profile.hpp>
 #include "../Clock.hpp"
 

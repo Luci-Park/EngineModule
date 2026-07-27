@@ -1,3 +1,12 @@
+/**
+ * @file TypeId.hpp
+ * @author sumin.park
+ * @brief Compile-time type identity: runtime seq, stable hash and trimmed type name.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/log/Assert.hpp>
 
@@ -23,7 +32,6 @@ namespace engine
         }
     };
 
-    // Fowler-Noll-Vo -> string hashing function
     constexpr uint32_t Fnv1a32(std::string_view s)
     {
         uint32_t hash = 2166136261u; // offset basis
@@ -43,7 +51,6 @@ namespace engine
 
     namespace detail
     {
-        // convert T(raw compiler-signature) to string
         template <typename T>
         constexpr std::string_view TrimTypeNameRaw()
         {
@@ -56,14 +63,13 @@ namespace engine
             std::string_view sig = __PRETTY_FUNCTION__;
             std::string_view marker = "T = ";
 #else
-#error "TrimTypeNameRaw: unsupported compiler -- no known signature macro, add a branch"
+#error "TrimTypeNameRaw: unsupported compiler; no known signature macro, add a branch"
 #endif
             const std::size_t markerPos = sig.find(marker);
             if (markerPos == std::string_view::npos)
                 throw "TrimTypeNameRaw: signature marker not found";
 
             const std::size_t start = markerPos + marker.size();
-            // slice string from the marker
 #if defined(_MSC_VER)
             int depth = 1;
             std::size_t i = start;
@@ -86,7 +92,7 @@ namespace engine
             return prev == '\0' || prev == '<' || prev == ',' || prev == ' ' || prev == '(';
         }
 
-        // identifier char -- a space between two of these is significant ("unsigned int")
+        // identifier char; a space between two of these is significant ("unsigned int")
         constexpr bool IsWordChar(char c)
         {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -107,11 +113,9 @@ namespace engine
             return 0;
         }
 
-        // normalize the raw signigure slice to just type name
-        // ex) "struct Foo< struct Bar , struct Baz >" -> "Foo<Bar,Baz>"
+        // "struct Foo< struct Bar , struct Baz >" -> "Foo<Bar,Baz>"
         constexpr std::size_t NormalizeTypeName(std::string_view raw, char *out)
         {
-            // strip trailing spaces
             while (!raw.empty() && raw.back() == ' ')
                 raw.remove_suffix(1);
 
@@ -119,10 +123,8 @@ namespace engine
             char prev = '\0'; // last emitted char
             for (std::size_t i = 0; i < raw.size(); ++i)
             {
-                // can it be a start of a keyword
                 if (IsKeywordBoundary(prev))
                 {
-                    // skip if it starts with struct/class/enum
                     const std::size_t kw = KeywordLength(raw.substr(i));
                     if (kw != 0)
                     {
@@ -131,9 +133,8 @@ namespace engine
                     }
                 }
                 const char c = raw[i];
-                // a space is only significant between two word chars ("unsigned int");
-                // any space touching punctuation (< > , * ...) is formatting noise -> drop,
-                // so MSVC/GCC/Clang spacing converges to one canonical form
+                // drop every space except between two word chars; that is what makes
+                // MSVC and GCC/Clang spelling converge
                 if (c == ' ')
                 {
                     const bool nextWord = (i + 1 < raw.size()) && IsWordChar(raw[i + 1]);
@@ -195,7 +196,7 @@ namespace engine
             else
             {
                 ENGINE_ASSERT(it->second == rawSignature,
-                              "TypeId collision: \"{}\" and \"{}\" produce the same name hash {} -- "
+                              "TypeId collision: \"{}\" and \"{}\" produce the same name hash {}; "
                               "type names must be globally unique across namespaces",
                               it->second, rawSignature, hash);
             }

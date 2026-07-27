@@ -1,3 +1,12 @@
+/**
+ * @file Run.hpp
+ * @author sumin.park
+ * @brief Entry point for the engine-owned frame loop.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 

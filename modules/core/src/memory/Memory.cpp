@@ -1,3 +1,12 @@
+/**
+ * @file Memory.cpp
+ * @author sumin.park
+ * @brief Header-prefixed tracked allocation, statistics and leak reporting.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/memory/Memory.hpp>
 #include <engine/core/log/Log.hpp>
 #include <engine/core/log/Assert.hpp>

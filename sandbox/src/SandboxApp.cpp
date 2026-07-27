@@ -1,3 +1,12 @@
+/**
+ * @file SandboxApp.cpp
+ * @author sumin.park
+ * @brief Sandbox application lifecycle and shutdown-time diagnostics.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include "SandboxApp.hpp"
 
 #include <engine/core/log/Log.hpp>
@@ -6,9 +15,8 @@
 
 void SandboxApp::OnInit()
 {
-    // might move this to run if all plugins need it
     engine::InitLog();
-    ENGINE_LOG_INFO("SandboxApp init — running headless for {}s", RUN_SECONDS);
+    ENGINE_LOG_INFO("SandboxApp init, running headless for {}s", RUN_SECONDS);
 }
 
 void SandboxApp::OnUpdate(float dt)

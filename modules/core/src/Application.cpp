@@ -1,3 +1,12 @@
+/**
+ * @file Application.cpp
+ * @author sumin.park
+ * @brief Application lifetime and the lazily-created default frame pacer.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/Application.hpp>
 #include <engine/core/NullPacer.hpp>
 

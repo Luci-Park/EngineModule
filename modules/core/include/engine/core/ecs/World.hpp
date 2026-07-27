@@ -1,3 +1,12 @@
+/**
+ * @file World.hpp
+ * @author sumin.park
+ * @brief The ECS container: entity lifecycle, archetype management and component access.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 #include <engine/core/ecs/Column.hpp>
@@ -28,21 +37,19 @@ namespace engine
         uint32_t m_row = 0;
     };
 
-    // main ecs container
     class ENGINE_CORE_API World
     {
     public:
         World();
 
-        // MSVC's dllexport forces instatiation -> explicit delete needed
+        // dllexport forces instantiation of implicit copy ops -> C2280 unless spelled out
         World(const World &) = delete;
         World &operator=(const World &) = delete;
         World(World &&) = default;
         World &operator=(World &&) = default;
 
-        Entity Spawn(); // spawn empty entity
+        Entity Spawn();
 
-        // spawn entity with components
         template <typename... Ts>
         Entity Spawn(Ts... components)
         {
@@ -68,14 +75,15 @@ namespace engine
             if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
             {
                 SparseStorage<T> &storage = GetOrCreateSparseStorage<T>();
-                if (storage.Contains(e))
+                if (auto entry = storage.Find(e); entry.m_value != nullptr)
                 {
-                    *storage.Get(e) = std::move(value);
-                    storage.Meta(e)->m_changedTick = tick; // preserve m_addedTick
+                    *entry.m_value = std::move(value);
+                    entry.m_meta->m_changedTick = tick; // preserve m_addedTick
                 }
                 else
                 {
                     storage.Insert(e, std::move(value), ComponentMeta{tick, tick});
+                    ++m_structuralVersion; // new sparse component; invalidates live Mut<T>s
                 }
             }
             else
@@ -87,7 +95,7 @@ namespace engine
                 {
                     existing->Get(loc.m_row) = std::move(value);
                     existing->Meta(loc.m_row).m_changedTick = tick; // preserve m_addedTick
-                    return;
+                    return;                                         // overwrite in place; no structural change
                 }
 
                 const uint32_t seq = TypeIdOf<T>().m_seq;
@@ -95,12 +103,12 @@ namespace engine
                                                                    []() -> std::unique_ptr<IColumn>
                                                                    { return std::make_unique<Column<T>>(); });
 
-                // holding a storage across a modifying step may cause errors
-                // needs re-fetching
+                // archetype creation may reallocate m_archetypes -> re-fetch both
                 Archetype &src = *m_archetypes[loc.m_archetypeId];
                 Archetype &dst = *m_archetypes[dstId];
 
                 const Entity displaced = src.m_table.MoveRowTo(loc.m_row, dst.m_table);
+                ++m_structuralVersion; // archetype transition; invalidates live Mut<T>s
                 Column<T> *dstColumn = dst.m_table.GetColumn<T>();
                 dstColumn->Push(std::move(value), ComponentMeta{tick, tick});
 
@@ -122,7 +130,10 @@ namespace engine
             if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
             {
                 if (ISparseStorage *storage = FindSparseStorage(TypeIdOf<T>().m_seq))
-                    storage->Remove(e);
+                {
+                    if (storage->Remove(e))
+                        ++m_structuralVersion; // actually removed; invalidates live Mut<T>s
+                }
             }
             else
             {
@@ -133,11 +144,12 @@ namespace engine
                 const uint32_t seq = TypeIdOf<T>().m_seq;
                 const uint32_t dstId = FindOrCreateArchetypeForRemove(loc.m_archetypeId, seq);
 
-                // re-fetch after creation
+                // archetype creation may reallocate m_archetypes -> re-fetch both
                 Archetype &src = *m_archetypes[loc.m_archetypeId];
                 Archetype &dst = *m_archetypes[dstId];
 
                 const Entity displaced = src.m_table.MoveRowTo(loc.m_row, dst.m_table);
+                ++m_structuralVersion; // archetype transition; invalidates live Mut<T>s
 
                 EntityLocation &newLoc = m_locations[e.m_index];
                 newLoc.m_archetypeId = dstId;
@@ -147,17 +159,17 @@ namespace engine
             }
         }
 
-        // nullptr if invalid
+        // reads only; Mut<T> via GetComponentMut/Query is the sole write path
         template <typename T>
-        T *GetComponent(Entity e)
+        const T *GetComponent(Entity e) const
         {
             if (!m_entities.IsAlive(e))
                 return nullptr;
 
             if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
             {
-                ISparseStorage *storage = FindSparseStorage(TypeIdOf<T>().m_seq);
-                return storage == nullptr ? nullptr : static_cast<SparseStorage<T> *>(storage)->Get(e);
+                const ISparseStorage *storage = FindSparseStorage(TypeIdOf<T>().m_seq);
+                return storage == nullptr ? nullptr : static_cast<const SparseStorage<T> *>(storage)->Get(e);
             }
             else
             {
@@ -188,7 +200,8 @@ namespace engine
         uint32_t CurrentTick() const;
         void AdvanceTick();
 
-        // used to track change
+        uint32_t StructuralVersion() const;
+
         template <typename T>
         std::optional<Mut<T>> GetComponentMut(Entity e)
         {
@@ -201,10 +214,11 @@ namespace engine
                 if (storage == nullptr)
                     return std::nullopt;
                 auto *typedStorage = static_cast<SparseStorage<T> *>(storage);
-                T *ptr = typedStorage->Get(e);
-                if (ptr == nullptr)
+                auto entry = typedStorage->Find(e);
+                if (entry.m_value == nullptr)
                     return std::nullopt;
-                return Mut<T>{ptr, &typedStorage->Meta(e)->m_changedTick, m_currentTick};
+                return Mut<T>{entry.m_value, &entry.m_meta->m_changedTick, m_currentTick,
+                              &m_structuralVersion, m_structuralVersion};
             }
             else
             {
@@ -212,11 +226,11 @@ namespace engine
                 Column<T> *column = m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>();
                 if (column == nullptr)
                     return std::nullopt;
-                return Mut<T>{&column->Get(loc.m_row), &column->Meta(loc.m_row).m_changedTick, m_currentTick};
+                return Mut<T>{&column->Get(loc.m_row), &column->Meta(loc.m_row).m_changedTick, m_currentTick,
+                              &m_structuralVersion, m_structuralVersion};
             }
         }
 
-        // observation primitive
         template <typename T>
         const ComponentMeta *GetComponentMeta(Entity e)
         {
@@ -238,10 +252,12 @@ namespace engine
             }
         }
 
-        // debug invariant checker -- see plan Constraints for what it covers.
         void Validate() const;
 
     private:
+        template <typename... Ps>
+        friend class Query;
+
         struct Archetype
         {
             std::vector<uint32_t> m_signature; // sorted seq list of table-component seqs
@@ -276,6 +292,7 @@ namespace engine
         std::unordered_map<uint64_t, std::vector<uint32_t>> m_signatureIndex;           // sig-hash -> candidate archetypeIds
         std::vector<EntityLocation> m_locations;                                        // entity index -> location
         std::unordered_map<uint32_t, std::unique_ptr<ISparseStorage>> m_sparseStorages; // seq -> storage
-        uint32_t m_currentTick = 1;                                                     // 0 reserved -> default ComponentMeta means "never stamped"
+        uint32_t m_currentTick = 1;                                                     // 0 reserved for never stamped
+        uint32_t m_structuralVersion = 0;                                               // bumped on any relocation; Mut<T> captures it to detect dangling
     };
 }

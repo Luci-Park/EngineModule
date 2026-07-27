@@ -43,8 +43,8 @@ static_assert(Fnv1a32("abc") != Fnv1a32("abd"));
 static_assert(TrimTypeName<PlainStruct>() == "PlainStruct");
 static_assert(TrimTypeName<typeid_test_ns::Namespaced>() == "Namespaced");
 static_assert(TrimTypeName<typeid_test_ns::Outer::Inner>() == "Inner");
-// template types: normalized to compiler-independent form (no defaulted-args types here --
-// those stay per-compiler; see NormalizeTypeName). '::' inside args must not split the name.
+// template types normalize to a compiler-independent form; defaulted-args types stay
+// per-compiler (see NormalizeTypeName). '::' inside args must not split the name.
 static_assert(TrimTypeName<Wrapper<PlainStruct>>() == "Wrapper<PlainStruct>");
 static_assert(TrimTypeName<typeid_test_ns::Tpl<typeid_test_ns::Namespaced>>()
               == "Tpl<typeid_test_ns::Namespaced>");
@@ -54,16 +54,16 @@ static_assert(TrimTypeName<Wrapper<typeid_test_ns::Tpl<PlainStruct>>>()
 // NormalizeTypeName whitespace contract, enforced on whichever compiler builds these tests
 // (MSVC now, GCC/Clang on the linux presets). If either compiler's raw signature spacing
 // stops normalizing to the canonical form, the build fails here rather than silently drifting.
-// NB: only types spelled identically across compilers are valid here -- MSVC renames some
+// NB: only types spelled identically across compilers are valid here; MSVC renames some
 // builtins (long long -> __int64) just like it prints defaulted template args, so those are
 // per-compiler and deliberately excluded (see ENGINE_DESIGN.md TypeId Name-trimming caveat).
-// -- multi-token builtin: the space between two word chars is LOAD-BEARING, must survive:
+//; multi-token builtin: the space between two word chars is LOAD-BEARING, must survive:
 static_assert(TrimTypeName<unsigned int>() == "unsigned int");
-// -- comma spacing: MSVC emits "A,B", GCC/Clang "A, B" -> both canonicalize to "A,B";
+//; comma spacing: MSVC emits "A,B", GCC/Clang "A, B" -> both canonicalize to "A,B";
 //    inner-arg namespace qualifiers are preserved (only the OUTER type's leading ns is stripped):
 static_assert(TrimTypeName<Pair<PlainStruct, typeid_test_ns::Namespaced>>()
               == "Pair<PlainStruct,typeid_test_ns::Namespaced>");
-// -- both rules at once: drop the comma space, keep the load-bearing "unsigned int" space:
+//; both rules at once: drop the comma space, keep the load-bearing "unsigned int" space:
 static_assert(TrimTypeName<Pair<unsigned int, PlainStruct>>()
               == "Pair<unsigned int,PlainStruct>");
 
@@ -76,7 +76,7 @@ TEST_CASE("Fnv1a32 matches known precomputed FNV-1a 32-bit vectors", "[core][ecs
     REQUIRE(Fnv1a32("foobar") == 0xbf9cf968u);
 }
 
-// TrimTypeName coverage lives in the static_assert block above -- a runtime TEST_CASE
+// TrimTypeName coverage lives in the static_assert block above; a runtime TEST_CASE
 // re-asserting the same constexpr equalities can never fail if this file compiles.
 
 TEST_CASE("TypeIdOf is stable across calls for the same type", "[core][ecs][typeid]")

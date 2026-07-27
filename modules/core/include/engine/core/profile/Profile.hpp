@@ -1,3 +1,12 @@
+/**
+ * @file Profile.hpp
+ * @author sumin.park
+ * @brief Scoped profiling macros and the per-frame zone snapshot they feed.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 
@@ -5,7 +14,7 @@
 
 namespace engine
 {
-    // one zone's inclusive total over the last completed frame.
+    // aggregated over the last completed frame
     struct ProfileZone
     {
         const char *name = nullptr; // literal pointer, aggregation key

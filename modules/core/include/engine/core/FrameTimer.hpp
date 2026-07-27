@@ -1,3 +1,12 @@
+/**
+ * @file FrameTimer.hpp
+ * @author sumin.park
+ * @brief Frame delta timing, per-frame statistics and a rolling history window.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 #include <cstdint>
@@ -16,7 +25,6 @@ namespace engine
     class ENGINE_CORE_API FrameTimer
     {
     public:
-        // for profiling and such
         static constexpr uint32_t HISTORY_CAPACITY = 1024; // >= 2s up to ~512 fps
 
         FrameTimer();
@@ -25,15 +33,14 @@ namespace engine
 
         const FrameStats &Stats() const { return m_stats; }
 
-        // for profiling and such (s)
+        // seconds per sample, oldest-first from HistoryCount()
         const float *History() const { return m_history; }
         uint32_t HistoryCount() const { return m_count < HISTORY_CAPACITY ? m_count : HISTORY_CAPACITY; }
         uint32_t HistoryCapacity() const { return HISTORY_CAPACITY; }
 
     private:
-        // push history
         void Push(float dt);
-        void RescanMinMax(); // execute when current min/max pass save history
+        void RescanMinMax(); // the running min/max fell out of the window -> recompute from history
 
         int64_t m_lastNs = 0;
         bool m_started = false;

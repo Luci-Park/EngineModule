@@ -1,3 +1,12 @@
+/**
+ * @file Entity.hpp
+ * @author sumin.park
+ * @brief Generational entity handle.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <cstdint>
 

@@ -1,3 +1,12 @@
+/**
+ * @file ComponentMeta.hpp
+ * @author sumin.park
+ * @brief Per-row change-detection ticks stored alongside component data.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <cstdint>
 

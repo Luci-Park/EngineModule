@@ -1,3 +1,12 @@
+/**
+ * @file Memory.hpp
+ * @author sumin.park
+ * @brief Tracked allocation entry points, memory tags and leak reporting.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/core_export.h>
 
@@ -28,7 +37,8 @@ namespace engine
         std::size_t perTagBytes[static_cast<std::size_t>(MemoryTag::Count)] = {};
     };
 
-    // position + type
+    // implicit conversion from MemoryTag -> lets call sites pass a bare tag while still
+    // capturing source_location, which a defaulted param after a variadic pack cannot do
     struct AllocSite
     {
         MemoryTag tag;

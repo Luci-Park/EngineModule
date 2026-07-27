@@ -1,3 +1,12 @@
+/**
+ * @file Table.hpp
+ * @author sumin.park
+ * @brief Archetype table: a set of component columns sharing one row space.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/ecs/Column.hpp>
 #include <engine/core/ecs/Entity.hpp>
@@ -16,18 +25,17 @@ namespace engine
     class Table
     {
     public:
-        // basic
         template <typename T>
         void AddColumn()
         {
             AddColumn(TypeIdOf<T>().m_seq, std::make_unique<Column<T>>());
         }
 
-        // used when column already exists elsewhere
+        // takes an already-built column, e.g. CloneEmpty from the source archetype
         void AddColumn(uint32_t seq, std::unique_ptr<IColumn> column)
         {
             ENGINE_ASSERT(m_columns.find(seq) == m_columns.end(), "Table::AddColumn: column already present for this component");
-            ENGINE_ASSERT(column->ComponentSeq() == seq, "Table::AddColumn: column type does not match seq key -- GetColumn<T> would static_cast to the wrong type");
+            ENGINE_ASSERT(column->ComponentSeq() == seq, "Table::AddColumn: column type does not match seq key; GetColumn<T> would static_cast to the wrong type");
             m_columns.emplace(seq, std::move(column));
         }
 
@@ -43,7 +51,7 @@ namespace engine
 
         bool HasColumn(uint32_t seq) const { return m_columns.find(seq) != m_columns.end(); }
 
-        // used only when caller doesn't know each column's T
+        // untyped lookup, for callers iterating columns without knowing each T
         IColumn *FindColumn(uint32_t seq)
         {
             auto it = m_columns.find(seq);
@@ -62,7 +70,7 @@ namespace engine
             return m_entities.size() - 1;
         }
 
-        // destroy entity and all columns, fill it by moving in last entity
+        // fills the hole with the last row -> returns that row's entity so the caller can fix its location
         Entity SwapRemove(std::size_t row)
         {
             ENGINE_ASSERT(row < m_entities.size(), "Table::SwapRemove: row out of range");
@@ -86,7 +94,7 @@ namespace engine
             return result;
         }
 
-        // return the entity moved into srcRow
+        // returns the entity moved into srcRow, or null; caller must fix its location
         Entity MoveRowTo(std::size_t srcRow, Table &dst)
         {
             ENGINE_ASSERT(srcRow < m_entities.size(), "Table::MoveRowTo: row out of range");
@@ -123,7 +131,6 @@ namespace engine
             return displaced;
         }
 
-        // debug: every column Size()==RowCount(); no duplicate live entity
         void Validate() const
         {
 #ifndef NDEBUG

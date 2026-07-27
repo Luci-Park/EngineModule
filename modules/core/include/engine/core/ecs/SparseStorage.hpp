@@ -1,3 +1,12 @@
+/**
+ * @file SparseStorage.hpp
+ * @author sumin.park
+ * @brief World-global sparse-set storage for high-churn or rare components.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/ecs/ComponentMeta.hpp>
 #include <engine/core/ecs/Entity.hpp>
@@ -11,28 +20,29 @@
 
 namespace engine
 {
-    // storage for components not part of archetype
-    // interface for type-erasing
+    // type-erased handle to one world-global sparse component store
     struct ISparseStorage
     {
         virtual ~ISparseStorage() = default;
 
-        virtual void Remove(Entity e) = 0; // no-op if absent
+        virtual bool Remove(Entity e) = 0; // false if absent; return gates the caller's structural bump
         virtual bool Contains(Entity e) const = 0;
         virtual std::size_t Size() const = 0;
         virtual Entity DenseEntityAt(std::size_t denseIndex) const = 0;
-        virtual void Validate() const = 0; // debug: sparse<->dense bijection intact
+        virtual void Validate() const = 0;
     };
 
     template <typename T>
     class SparseStorage final : public ISparseStorage
     {
-        // throw before change happens
+        // insert/remove relocate dense rows -> a throwing move desyncs the parallel arrays
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "ECS component T must be trivially copyable");
         static_assert(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_assignable_v<T>,
                       "ECS component T must be nothrow-movable");
 
     public:
-        // will override exiting component
+        // overwrites an existing component, preserving its dense slot
         void Insert(Entity e, T value, ComponentMeta meta = {})
         {
             if (e.IsNull())
@@ -58,10 +68,10 @@ namespace engine
             m_sparse[e.m_index] = newDense;
         }
 
-        void Remove(Entity e) override
+        bool Remove(Entity e) override
         {
             if (!Contains(e))
-                return;
+                return false;
 
             const uint32_t dense = m_sparse[e.m_index];
             const std::size_t last = m_dense.size() - 1;
@@ -77,6 +87,7 @@ namespace engine
             m_meta.pop_back();
             m_entities.pop_back();
             m_sparse[e.m_index] = INVALID;
+            return true;
         }
 
         bool Contains(Entity e) const override
@@ -95,6 +106,27 @@ namespace engine
             if (!Contains(e))
                 return nullptr;
             return &m_dense[m_sparse[e.m_index]];
+        }
+
+        const T *Get(Entity e) const
+        {
+            if (!Contains(e))
+                return nullptr;
+            return &m_dense[m_sparse[e.m_index]];
+        }
+
+        struct Entry
+        {
+            T *m_value;
+            ComponentMeta *m_meta;
+        };
+
+        Entry Find(Entity e)
+        {
+            if (!Contains(e))
+                return {nullptr, nullptr};
+            const uint32_t dense = m_sparse[e.m_index];
+            return {&m_dense[dense], &m_meta[dense]};
         }
 
         ComponentMeta *Meta(Entity e)

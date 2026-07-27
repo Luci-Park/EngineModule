@@ -1,3 +1,12 @@
+/**
+ * @file World.cpp
+ * @author sumin.park
+ * @brief World entity lifecycle, archetype find-or-create and debug validation.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #include <engine/core/ecs/World.hpp>
 
 #include <algorithm>
@@ -18,6 +27,7 @@ namespace engine
 
         const std::size_t row = m_archetypes[EMPTY_ARCHETYPE_ID]->m_table.AddEntity(e);
         m_locations[e.m_index] = EntityLocation{EMPTY_ARCHETYPE_ID, static_cast<uint32_t>(row)};
+        ++m_structuralVersion;
         return e;
     }
 
@@ -36,6 +46,7 @@ namespace engine
             storage->Remove(e);
 
         m_entities.Free(e);
+        ++m_structuralVersion;
     }
 
     bool World::IsAlive(Entity e) const { return m_entities.IsAlive(e); }
@@ -46,9 +57,10 @@ namespace engine
 
     void World::AdvanceTick() { ++m_currentTick; }
 
+    uint32_t World::StructuralVersion() const { return m_structuralVersion; }
+
     uint64_t World::HashSignature(const std::vector<uint32_t> &signature) const
     {
-        // hashing through 32-bit FNV-1a
         const std::string_view bytes(reinterpret_cast<const char *>(signature.data()),
                                      signature.size() * sizeof(uint32_t));
         return static_cast<uint64_t>(Fnv1a32(bytes));
@@ -81,7 +93,7 @@ namespace engine
                                                 const std::function<std::unique_ptr<IColumn>()> &makeColumn)
     {
         std::vector<uint32_t> dstSig = m_archetypes[srcArchetypeId]->m_signature;
-        dstSig.insert(std::upper_bound(dstSig.begin(), dstSig.end(), addSeq), addSeq); // sorted insert
+        dstSig.insert(std::upper_bound(dstSig.begin(), dstSig.end(), addSeq), addSeq); // signature stays sorted for binary_search in Query
 
         if (const uint32_t found = FindArchetypeId(dstSig); found != INVALID_ARCHETYPE_ID)
             return found;
@@ -129,6 +141,11 @@ namespace engine
     void World::Validate() const
     {
 #ifndef NDEBUG
+        // identity and placement grow in step: Spawn resizes m_locations to cover every
+        // allocated slot, so a mismatch means an entity exists with no location entry
+        ENGINE_ASSERT(m_locations.size() == m_entities.SlotCount(),
+                      "World::Validate: location map does not track the allocator slot count");
+
         std::size_t totalRows = 0;
         for (uint32_t archetypeId = 0; archetypeId < m_archetypes.size(); ++archetypeId)
         {

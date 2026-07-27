@@ -1,3 +1,12 @@
+/**
+ * @file LinearAllocator.hpp
+ * @author sumin.park
+ * @brief Bump-pointer arena; individual frees are no-ops, reclaimed in bulk by Reset.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/memory/IAllocator.hpp>
 #include <engine/core/memory/Memory.hpp>

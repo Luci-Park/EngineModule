@@ -1,3 +1,12 @@
+/**
+ * @file Column.hpp
+ * @author sumin.park
+ * @brief Typed component array for one archetype column, plus its type-erased interface.
+ *
+ * @copyright Copyright (c) 2026 DigiPen (USA) Corporation
+ *
+ */
+
 #pragma once
 #include <engine/core/ecs/ComponentMeta.hpp>
 #include <engine/core/ecs/TypeId.hpp>
@@ -12,8 +21,7 @@
 
 namespace engine
 {
-    // component storage for architype
-    // interface for type-erasure
+    // type-erased handle to one archetype column
     struct IColumn
     {
         virtual ~IColumn() = default;
@@ -29,7 +37,9 @@ namespace engine
     template <typename T>
     class Column final : public IColumn
     {
-        // rows get relocated by SwapRemove/MoveRowTo -> a throwing move would desync the parallel
+        // SwapRemove/MoveRowTo relocate rows -> a throwing move desyncs m_data from m_meta
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "ECS component T must be trivially copyable");
         static_assert(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_assignable_v<T>,
                       "ECS component T must be nothrow-movable");
 
@@ -81,8 +91,7 @@ namespace engine
 
             auto &typedDst = static_cast<Column<T> &>(dst);
 
-            // growing dst should happen before changing source
-            // change will not happen on exception at ReserveOneMore()
+            // grow dst first; if it throws, src is still untouched
             typedDst.ReserveOneMore();
             typedDst.m_data.push_back(std::move(m_data[row]));
             typedDst.m_meta.push_back(m_meta[row]);
@@ -108,7 +117,6 @@ namespace engine
         std::unique_ptr<IColumn> CloneEmpty() const override { return std::make_unique<Column<T>>(); }
 
     private:
-        // reserve room for both arrays
         void ReserveOneMore()
         {
             const std::size_t needed = m_data.size() + 1;
