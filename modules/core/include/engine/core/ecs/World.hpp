@@ -47,6 +47,7 @@ namespace engine
         World &operator=(const World &) = delete;
         World(World &&) = default;
         World &operator=(World &&) = default;
+        ~World(); // fires every live entity's on_remove hooks; must stay a real destructor
 
         Entity Spawn();
 
@@ -67,6 +68,7 @@ namespace engine
         template <typename T>
         void AddComponent(Entity e, T value)
         {
+            ENGINE_ASSERT(!m_inHook, "World::AddComponent: hook-initiated structural change is forbidden");
             if (!m_entities.IsAlive(e))
                 return;
 
@@ -78,13 +80,18 @@ namespace engine
                 SparseStorage<T> &storage = GetOrCreateSparseStorage<T>();
                 if (auto entry = storage.Find(e); entry.m_value != nullptr)
                 {
+                    // overwrite: on_remove sees the outgoing value, on_add the incoming one,
+                    // at the same address; m_addedTick is deliberately untouched (decision A)
+                    FireOnRemove(info, e, entry.m_value);
                     *entry.m_value = std::move(value);
                     entry.m_meta->m_changedTick = tick; // preserve m_addedTick
+                    FireOnAdd(info, e, entry.m_value);
                 }
                 else
                 {
                     storage.Insert(e, std::move(value), ComponentMeta{tick, tick});
                     ++m_structuralVersion; // new sparse component; invalidates live Mut<T>s
+                    FireOnAdd(info, e, storage.Get(e));
                 }
             }
             else
@@ -94,9 +101,12 @@ namespace engine
 
                 if (Column<T> *existing = srcArchetype.m_table.GetColumn<T>())
                 {
-                    existing->Get(loc.m_row) = std::move(value);
+                    T *data = &existing->Get(loc.m_row);
+                    FireOnRemove(info, e, data); // overwrite pair, see the sparse branch above
+                    *data = std::move(value);
                     existing->Meta(loc.m_row).m_changedTick = tick; // preserve m_addedTick
-                    return;                                         // overwrite in place; no structural change
+                    FireOnAdd(info, e, data);
+                    return; // overwrite in place; no structural change
                 }
 
                 const uint32_t dstId = FindOrCreateArchetypeForAdd(loc.m_archetypeId, info.m_seq);
@@ -106,7 +116,7 @@ namespace engine
                 Archetype &dst = *m_archetypes[dstId];
 
                 const Entity displaced = src.m_table.MoveRowTo(loc.m_row, dst.m_table);
-                ++m_structuralVersion; // archetype transition; invalidates live Mut<T>s
+                ++m_structuralVersion; // archetype transition; invalidates live Mut<T>s. fires no hooks: T is new here, every other column just relocates
                 Column<T> *dstColumn = dst.m_table.GetColumn<T>();
                 dstColumn->Push(std::move(value), ComponentMeta{tick, tick});
 
@@ -115,6 +125,8 @@ namespace engine
                 newLoc.m_row = static_cast<uint32_t>(dst.m_table.RowCount() - 1);
                 if (!displaced.IsNull())
                     m_locations[displaced.m_index].m_row = loc.m_row;
+
+                FireOnAdd(info, e, &dstColumn->Get(newLoc.m_row));
             }
         }
 
@@ -122,27 +134,39 @@ namespace engine
         template <typename T>
         void RemoveComponent(Entity e)
         {
+            ENGINE_ASSERT(!m_inHook, "World::RemoveComponent: hook-initiated structural change is forbidden");
             if (!m_entities.IsAlive(e))
                 return;
 
-            // no Register<T> here: removal only ever drops a column that already exists, so it
-            // needs no record. Registering would make a defensive remove of a never-added type
-            // trip the frozen-registry assert while changing nothing.
+            // no Register<T> here: removal only drops an existing column, no record needed; a
+            // defensive remove of a never-added type would otherwise trip the frozen assert for nothing
             const uint32_t seq = TypeIdOf<T>().m_seq;
 
             if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
             {
                 if (ISparseStorage *storage = FindSparseStorage(seq))
                 {
-                    if (storage->Remove(e))
+                    // DataFor also proves presence; Remove()'s own Contains() check runs again,
+                    // but a hook needs the data pointer before the row is gone, so one extra
+                    // lookup here is unavoidable (see plan 08, chunk 2 notes)
+                    if (void *data = storage->DataFor(e); data != nullptr)
+                    {
+                        if (const ComponentInfo *info = m_components.Find(seq))
+                            FireOnRemove(*info, e, data);
+                        storage->Remove(e);
                         ++m_structuralVersion; // actually removed; invalidates live Mut<T>s
+                    }
                 }
             }
             else
             {
                 const EntityLocation loc = m_locations[e.m_index];
-                if (m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>() == nullptr)
+                Column<T> *column = m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>();
+                if (column == nullptr)
                     return;
+
+                if (const ComponentInfo *info = m_components.Find(seq))
+                    FireOnRemove(*info, e, &column->Get(loc.m_row)); // before MoveRowTo; data still in place
 
                 const uint32_t dstId = FindOrCreateArchetypeForRemove(loc.m_archetypeId, seq);
 
@@ -260,6 +284,12 @@ namespace engine
         void FreezeComponents() { m_components.Freeze(); }
         bool ComponentsFrozen() const { return m_components.IsFrozen(); }
 
+        template <typename T>
+        void SetComponentHooks(void (*onAdd)(World &, Entity, void *) noexcept, void (*onRemove)(World &, Entity, void *) noexcept)
+        {
+            m_components.SetHooks<T>(onAdd, onRemove);
+        }
+
         void Validate() const;
 
     private:
@@ -284,6 +314,10 @@ namespace engine
         ISparseStorage *FindSparseStorage(uint32_t seq);
         const ISparseStorage *FindSparseStorage(uint32_t seq) const;
 
+        void FireOnAdd(const ComponentInfo &info, Entity e, void *data);
+        void FireOnRemove(const ComponentInfo &info, Entity e, void *data);
+        void FireRemoveHooksForEntity(Entity e);
+
         template <typename T>
         SparseStorage<T> &GetOrCreateSparseStorage()
         {
@@ -302,5 +336,6 @@ namespace engine
         ComponentRegistry m_components;
         uint32_t m_currentTick = 1;                                                     // 0 reserved for never stamped
         uint32_t m_structuralVersion = 0;                                               // bumped on any relocation; Mut<T> captures it to detect dangling
+        bool m_inHook = false;                                                          // re-entrancy guard: hook-initiated structural change is forbidden
     };
 }

@@ -30,6 +30,7 @@ namespace engine
         virtual std::size_t Size() const = 0;
         virtual Entity DenseEntityAt(std::size_t denseIndex) const = 0;
         virtual void Validate() const = 0;
+        virtual void *DataFor(Entity e) = 0; // type-erased component bytes for hooks, nullptr if absent
     };
 
     template <typename T>
@@ -143,6 +144,8 @@ namespace engine
             ENGINE_ASSERT(denseIndex < m_entities.size(), "SparseStorage::DenseEntityAt: index out of range");
             return m_entities[denseIndex];
         }
+
+        void *DataFor(Entity e) override { return Get(e); }
 
         void Validate() const override
         {

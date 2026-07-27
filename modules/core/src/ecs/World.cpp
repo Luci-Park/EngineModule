@@ -19,8 +19,36 @@ namespace engine
         RegisterArchetype(std::make_unique<Archetype>());
     }
 
+    World::~World()
+    {
+        // table components: every entity is placed (unplaced/deferred entities don't exist
+        // until unit 10), so walking every table row reaches every live entity exactly once
+        for (const auto &archetype : m_archetypes)
+        {
+            const Table &table = archetype->m_table;
+            for (std::size_t row = 0; row < table.RowCount(); ++row)
+                FireRemoveHooksForEntity(table.EntityAt(row));
+        }
+
+        // sparse components: walk each storage's own dense array directly, not per-entity;
+        // O(sum of sparse sizes) instead of O(entity count * sparse type count)
+        for (auto &[seq, storage] : m_sparseStorages)
+        {
+            const ComponentInfo *info = m_components.Find(seq);
+            if (info == nullptr)
+                continue;
+            for (std::size_t dense = 0; dense < storage->Size(); ++dense)
+            {
+                const Entity e = storage->DenseEntityAt(dense);
+                FireOnRemove(*info, e, storage->DataFor(e));
+            }
+        }
+    }
+
     Entity World::Spawn()
     {
+        ENGINE_ASSERT(!m_inHook, "World::Spawn: hook-initiated structural change is forbidden");
+
         Entity e = m_entities.Allocate();
         if (e.m_index >= m_locations.size())
             m_locations.resize(e.m_index + 1);
@@ -33,8 +61,11 @@ namespace engine
 
     void World::Despawn(Entity e)
     {
+        ENGINE_ASSERT(!m_inHook, "World::Despawn: hook-initiated structural change is forbidden");
         if (!m_entities.IsAlive(e))
             return;
+
+        FireRemoveHooksForEntity(e); // table components, before SwapRemove; on_remove contract
 
         const EntityLocation loc = m_locations[e.m_index];
         Archetype &archetype = *m_archetypes[loc.m_archetypeId];
@@ -42,8 +73,16 @@ namespace engine
         if (!displaced.IsNull())
             m_locations[displaced.m_index].m_row = loc.m_row;
 
+        // sparse: fire and remove together, one pass; Remove() would re-probe presence itself
         for (auto &[seq, storage] : m_sparseStorages)
-            storage->Remove(e);
+        {
+            if (void *data = storage->DataFor(e); data != nullptr)
+            {
+                if (const ComponentInfo *info = m_components.Find(seq))
+                    FireOnRemove(*info, e, data);
+                storage->Remove(e);
+            }
+        }
 
         m_entities.Free(e);
         ++m_structuralVersion;
@@ -123,6 +162,37 @@ namespace engine
         }
 
         return RegisterArchetype(std::move(archetype));
+    }
+
+    void World::FireOnAdd(const ComponentInfo &info, Entity e, void *data)
+    {
+        if (info.m_onAdd == nullptr)
+            return;
+        m_inHook = true;
+        info.m_onAdd(*this, e, data);
+        m_inHook = false;
+    }
+
+    void World::FireOnRemove(const ComponentInfo &info, Entity e, void *data)
+    {
+        if (info.m_onRemove == nullptr)
+            return;
+        m_inHook = true;
+        info.m_onRemove(*this, e, data);
+        m_inHook = false;
+    }
+
+    // table components only; sparse hooks are fired by the caller, which also owns the
+    // per-storage removal that would otherwise need a second pass over m_sparseStorages
+    void World::FireRemoveHooksForEntity(Entity e)
+    {
+        const EntityLocation loc = m_locations[e.m_index];
+        Archetype &archetype = *m_archetypes[loc.m_archetypeId];
+        for (uint32_t seq : archetype.m_signature)
+        {
+            if (const ComponentInfo *info = m_components.Find(seq))
+                FireOnRemove(*info, e, archetype.m_table.FindColumn(seq)->DataAt(loc.m_row));
+        }
     }
 
     ISparseStorage *World::FindSparseStorage(uint32_t seq)

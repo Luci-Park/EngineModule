@@ -38,9 +38,11 @@ namespace engine
         std::unique_ptr<IColumn> (*m_makeColumn)() = nullptr;
         std::unique_ptr<ISparseStorage> (*m_makeSparseStorage)() = nullptr;
 
-        // unit 08: no setter, no firing, no null-check branch anywhere in unit 07
-        void (*m_onAdd)(World &, Entity, void *) = nullptr;
-        void (*m_onRemove)(World &, Entity, void *) = nullptr;
+        // noexcept: an exception escaping a hook would leave m_inHook stuck true (FireOnAdd/
+        // FireOnRemove have no RAII guard) or terminate through ~World's implicit noexcept;
+        // this makes "hooks must not throw" a compile-time constraint on the pointer type
+        void (*m_onAdd)(World &, Entity, void *) noexcept = nullptr;
+        void (*m_onRemove)(World &, Entity, void *) noexcept = nullptr;
     };
 
     // the only population path in this unit; the runtime field-schema path (script

@@ -37,6 +37,23 @@ namespace engine
         const ComponentInfo *Find(uint32_t seq) const;
         const ComponentInfo &Get(uint32_t seq) const; // asserts if unknown
 
+        // the only mutating accessor on a record; hooks register during init like component
+        // types do, so this shares the freeze flag with Register (see plan 08, decision C).
+        // unconditional: unlike Register, an already-known T does not exempt this from the
+        // frozen check; Register and SetHooks are independent ways to touch the same record,
+        // so "T already has a record" says nothing about whether SetHooks itself ran before
+        // init closed. delegates record creation to Register<T>() rather than reimplementing
+        // find-or-insert here.
+        template <typename T>
+        void SetHooks(void (*onAdd)(World &, Entity, void *) noexcept, void (*onRemove)(World &, Entity, void *) noexcept)
+        {
+            ENGINE_ASSERT(!m_frozen, "ComponentRegistry::SetHooks: hooks must be attached before the registry is frozen");
+            Register<T>();
+            ComponentInfo &info = m_infos.find(TypeIdOf<T>().m_seq)->second;
+            info.m_onAdd = onAdd;
+            info.m_onRemove = onRemove;
+        }
+
         template <typename T>
         const ComponentInfo *Find() const
         {

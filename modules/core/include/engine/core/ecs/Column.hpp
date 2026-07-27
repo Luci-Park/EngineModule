@@ -32,6 +32,7 @@ namespace engine
         virtual std::size_t Size() const = 0;
         virtual uint32_t ComponentSeq() const = 0;
         virtual std::unique_ptr<IColumn> CloneEmpty() const = 0;
+        virtual void *DataAt(std::size_t row) = 0; // type-erased component bytes, for hooks
     };
 
     template <typename T>
@@ -115,6 +116,12 @@ namespace engine
         uint32_t ComponentSeq() const override { return TypeIdOf<T>().m_seq; }
 
         std::unique_ptr<IColumn> CloneEmpty() const override { return std::make_unique<Column<T>>(); }
+
+        void *DataAt(std::size_t row) override
+        {
+            ENGINE_ASSERT(row < m_data.size(), "Column::DataAt: row out of range");
+            return &m_data[row];
+        }
 
     private:
         void ReserveOneMore()
