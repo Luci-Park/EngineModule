@@ -18,6 +18,7 @@
 #include <engine/core/ecs/Table.hpp>
 #include <engine/core/ecs/TypeId.hpp>
 #include <engine/core/ecs/World.hpp>
+#include <engine/core/log/Assert.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -242,10 +243,12 @@ namespace engine
 
             static Iterator MakeEnd(Query *query)
             {
-                return Iterator(query, query->m_matched.size(), 0);
+                return Iterator(query, END_ARCHETYPE_IDX, 0);
             }
 
         private:
+            static constexpr std::size_t END_ARCHETYPE_IDX = static_cast<std::size_t>(-1);
+
             Iterator(Query *query, std::size_t archetypeIdx, std::size_t row)
                 : m_query(query), m_archetypeIdx(archetypeIdx), m_row(row)
             {
@@ -266,7 +269,10 @@ namespace engine
                     ++m_archetypeIdx;
                     m_row = 0;
                 }
-                m_archetypeIdx = m_query->m_matched.size(); // canonical end == (matched.size(), 0)
+                // must NOT be m_matched.size(): end() re-Refreshes in the common
+                // `it != q.end()` loop form, so a size-derived sentinel steps past a parked
+                // iterator and resurrects it onto a row RowMatches never validated
+                m_archetypeIdx = END_ARCHETYPE_IDX;
                 m_row = 0;
             }
 
@@ -275,9 +281,9 @@ namespace engine
             std::size_t m_row = 0;
         };
 
-        // both refresh: an archetype or sparse storage created after construction must not be
-        // silently dropped. end() refreshes too, so the pair is consistent whichever the caller
-        // evaluates first.
+        // begin() refreshes so an archetype or sparse storage created after construction is not
+        // silently dropped. end() must NOT: it is re-evaluated every pass of the common
+        // `it != q.end()` loop, and refreshing there mutates the match list mid-iteration.
         Iterator begin()
         {
             Refresh();
@@ -286,7 +292,6 @@ namespace engine
 
         Iterator end()
         {
-            Refresh();
             return Iterator::MakeEnd(this);
         }
 
@@ -493,7 +498,10 @@ namespace engine
                 {
                     (void)table;
                     (void)row;
-                    const typename SparseStorage<C>::Entry entry = SparseFor<C>()->Find(e); // presence proven by RowMatches
+                    SparseStorage<C> *storage = SparseFor<C>();
+                    ENGINE_ASSERT(storage != nullptr, "Query::FetchOne: sparse storage missing; RowMatches should have rejected this row");
+                    const typename SparseStorage<C>::Entry entry = storage->Find(e);
+                    ENGINE_ASSERT(entry.m_value != nullptr, "Query::FetchOne: entity lacks the sparse component; RowMatches should have rejected this row");
                     if constexpr (std::is_const_v<F>)
                         return *entry.m_value;
                     else

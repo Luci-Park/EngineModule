@@ -12,6 +12,7 @@ add_executable(core_tests
     core/ColumnTest.cpp
     core/TableTest.cpp
     core/SparseStorageTest.cpp
+    core/ComponentRegistryTest.cpp
     core/WorldTest.cpp
     core/ChangeDetectionTest.cpp
     core/QueryTest.cpp

@@ -57,13 +57,13 @@ static_assert(TrimTypeName<Wrapper<typeid_test_ns::Tpl<PlainStruct>>>()
 // NB: only types spelled identically across compilers are valid here; MSVC renames some
 // builtins (long long -> __int64) just like it prints defaulted template args, so those are
 // per-compiler and deliberately excluded (see ENGINE_DESIGN.md TypeId Name-trimming caveat).
-//; multi-token builtin: the space between two word chars is LOAD-BEARING, must survive:
+// multi-token builtin: the space between two word chars is LOAD-BEARING, must survive:
 static_assert(TrimTypeName<unsigned int>() == "unsigned int");
-//; comma spacing: MSVC emits "A,B", GCC/Clang "A, B" -> both canonicalize to "A,B";
+// comma spacing: MSVC emits "A,B", GCC/Clang "A, B" -> both canonicalize to "A,B";
 //    inner-arg namespace qualifiers are preserved (only the OUTER type's leading ns is stripped):
 static_assert(TrimTypeName<Pair<PlainStruct, typeid_test_ns::Namespaced>>()
               == "Pair<PlainStruct,typeid_test_ns::Namespaced>");
-//; both rules at once: drop the comma space, keep the load-bearing "unsigned int" space:
+// both rules at once: drop the comma space, keep the load-bearing "unsigned int" space:
 static_assert(TrimTypeName<Pair<unsigned int, PlainStruct>>()
               == "Pair<unsigned int,PlainStruct>");
 

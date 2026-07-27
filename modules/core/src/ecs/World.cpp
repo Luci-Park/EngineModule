@@ -89,8 +89,7 @@ namespace engine
         return id;
     }
 
-    uint32_t World::FindOrCreateArchetypeForAdd(uint32_t srcArchetypeId, uint32_t addSeq,
-                                                const std::function<std::unique_ptr<IColumn>()> &makeColumn)
+    uint32_t World::FindOrCreateArchetypeForAdd(uint32_t srcArchetypeId, uint32_t addSeq)
     {
         std::vector<uint32_t> dstSig = m_archetypes[srcArchetypeId]->m_signature;
         dstSig.insert(std::upper_bound(dstSig.begin(), dstSig.end(), addSeq), addSeq); // signature stays sorted for binary_search in Query
@@ -102,7 +101,7 @@ namespace engine
         archetype->m_signature = dstSig;
         for (const auto &[seq, column] : m_archetypes[srcArchetypeId]->m_table.Columns())
             archetype->m_table.AddColumn(seq, column->CloneEmpty());
-        archetype->m_table.AddColumn(addSeq, makeColumn());
+        archetype->m_table.AddColumn(addSeq, m_components.Get(addSeq).m_makeColumn());
 
         return RegisterArchetype(std::move(archetype));
     }

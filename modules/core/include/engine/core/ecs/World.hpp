@@ -10,6 +10,7 @@
 #pragma once
 #include <engine/core/core_export.h>
 #include <engine/core/ecs/Column.hpp>
+#include <engine/core/ecs/ComponentRegistry.hpp>
 #include <engine/core/ecs/Entity.hpp>
 #include <engine/core/ecs/EntityAllocator.hpp>
 #include <engine/core/ecs/Mut.hpp>
@@ -21,7 +22,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -70,6 +70,7 @@ namespace engine
             if (!m_entities.IsAlive(e))
                 return;
 
+            const ComponentInfo &info = m_components.Register<T>();
             const uint32_t tick = m_currentTick;
 
             if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
@@ -98,10 +99,7 @@ namespace engine
                     return;                                         // overwrite in place; no structural change
                 }
 
-                const uint32_t seq = TypeIdOf<T>().m_seq;
-                const uint32_t dstId = FindOrCreateArchetypeForAdd(loc.m_archetypeId, seq,
-                                                                   []() -> std::unique_ptr<IColumn>
-                                                                   { return std::make_unique<Column<T>>(); });
+                const uint32_t dstId = FindOrCreateArchetypeForAdd(loc.m_archetypeId, info.m_seq);
 
                 // archetype creation may reallocate m_archetypes -> re-fetch both
                 Archetype &src = *m_archetypes[loc.m_archetypeId];
@@ -127,9 +125,14 @@ namespace engine
             if (!m_entities.IsAlive(e))
                 return;
 
+            // no Register<T> here: removal only ever drops a column that already exists, so it
+            // needs no record. Registering would make a defensive remove of a never-added type
+            // trip the frozen-registry assert while changing nothing.
+            const uint32_t seq = TypeIdOf<T>().m_seq;
+
             if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
             {
-                if (ISparseStorage *storage = FindSparseStorage(TypeIdOf<T>().m_seq))
+                if (ISparseStorage *storage = FindSparseStorage(seq))
                 {
                     if (storage->Remove(e))
                         ++m_structuralVersion; // actually removed; invalidates live Mut<T>s
@@ -141,7 +144,6 @@ namespace engine
                 if (m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>() == nullptr)
                     return;
 
-                const uint32_t seq = TypeIdOf<T>().m_seq;
                 const uint32_t dstId = FindOrCreateArchetypeForRemove(loc.m_archetypeId, seq);
 
                 // archetype creation may reallocate m_archetypes -> re-fetch both
@@ -252,6 +254,12 @@ namespace engine
             }
         }
 
+        template <typename T>
+        const ComponentInfo &RegisterComponent() { return m_components.Register<T>(); }
+        const ComponentInfo *FindComponentInfo(uint32_t seq) const { return m_components.Find(seq); }
+        void FreezeComponents() { m_components.Freeze(); }
+        bool ComponentsFrozen() const { return m_components.IsFrozen(); }
+
         void Validate() const;
 
     private:
@@ -269,8 +277,7 @@ namespace engine
 
         uint32_t RegisterArchetype(std::unique_ptr<Archetype> archetype);
         uint32_t FindArchetypeId(const std::vector<uint32_t> &signature) const;
-        uint32_t FindOrCreateArchetypeForAdd(uint32_t srcArchetypeId, uint32_t addSeq,
-                                             const std::function<std::unique_ptr<IColumn>()> &makeColumn);
+        uint32_t FindOrCreateArchetypeForAdd(uint32_t srcArchetypeId, uint32_t addSeq);
         uint32_t FindOrCreateArchetypeForRemove(uint32_t srcArchetypeId, uint32_t removeSeq);
         uint64_t HashSignature(const std::vector<uint32_t> &signature) const;
 
@@ -280,10 +287,10 @@ namespace engine
         template <typename T>
         SparseStorage<T> &GetOrCreateSparseStorage()
         {
-            const uint32_t seq = TypeIdOf<T>().m_seq;
-            auto it = m_sparseStorages.find(seq);
+            const ComponentInfo &info = m_components.Register<T>();
+            auto it = m_sparseStorages.find(info.m_seq);
             if (it == m_sparseStorages.end())
-                it = m_sparseStorages.emplace(seq, std::make_unique<SparseStorage<T>>()).first;
+                it = m_sparseStorages.emplace(info.m_seq, info.m_makeSparseStorage()).first;
             return static_cast<SparseStorage<T> &>(*it->second);
         }
 
@@ -292,6 +299,7 @@ namespace engine
         std::unordered_map<uint64_t, std::vector<uint32_t>> m_signatureIndex;           // sig-hash -> candidate archetypeIds
         std::vector<EntityLocation> m_locations;                                        // entity index -> location
         std::unordered_map<uint32_t, std::unique_ptr<ISparseStorage>> m_sparseStorages; // seq -> storage
+        ComponentRegistry m_components;
         uint32_t m_currentTick = 1;                                                     // 0 reserved for never stamped
         uint32_t m_structuralVersion = 0;                                               // bumped on any relocation; Mut<T> captures it to detect dangling
     };

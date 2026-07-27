@@ -11,6 +11,7 @@ engine_add_module(core
     src/memory/LinearAllocator.cpp
     src/memory/PoolAllocator.cpp
     src/profile/Profile.cpp
+    src/ecs/ComponentRegistry.cpp
     src/ecs/EntityAllocator.cpp
     src/ecs/World.cpp
 )

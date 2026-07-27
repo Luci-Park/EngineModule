@@ -178,6 +178,29 @@ TEST_CASE("Query re-matches archetypes created after it was built", "[core][ecs]
     REQUIRE(sparseQ.Count() == 2);
 }
 
+// an exhausted iterator must stay equal to end() even if the match list grows afterwards.
+// end() is re-evaluated every pass of `for (it = q.begin(); it != q.end(); ++it)`, so a
+// sentinel derived from the live m_matched.size() would step past a parked iterator and
+// resurrect it onto a row RowMatches never validated.
+TEST_CASE("Query end() sentinel is stable across archetype creation", "[core][ecs][query]")
+{
+    World world;
+    world.Spawn(Position{1.0f});
+
+    Query<Entity, const Position> q(world);
+    auto it = q.begin();
+    auto stop = q.end();
+
+    ++it; // only one match, so this parks the iterator at end
+    REQUIRE_FALSE(it != stop);
+
+    world.Spawn(Health{5}); // new archetype; does not match, but grows the archetype vector
+    world.Spawn(Position{2.0f}, Velocity{3.0f}); // new archetype that DOES match
+    world.Validate();
+
+    REQUIRE_FALSE(it != q.end()); // parked iterator must not come back to life
+}
+
 TEST_CASE("Query Count() agrees with a manual range-for tally", "[core][ecs][query]")
 {
     World world;
