@@ -43,6 +43,10 @@ namespace engine
                 FireOnRemove(*info, e, storage->DataFor(e));
             }
         }
+
+        // contexts torn down last: hooks above may release resources INTO a context (C5),
+        // so every context must still be alive while the hook sweep runs
+        m_contexts.TearDown();
     }
 
     Entity World::Spawn()

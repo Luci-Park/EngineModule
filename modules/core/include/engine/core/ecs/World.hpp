@@ -11,6 +11,7 @@
 #include <engine/core/core_export.h>
 #include <engine/core/ecs/Column.hpp>
 #include <engine/core/ecs/ComponentRegistry.hpp>
+#include <engine/core/ecs/ContextRegistry.hpp>
 #include <engine/core/ecs/Entity.hpp>
 #include <engine/core/ecs/EntityAllocator.hpp>
 #include <engine/core/ecs/Mut.hpp>
@@ -290,6 +291,26 @@ namespace engine
             m_components.SetHooks<T>(onAdd, onRemove);
         }
 
+        // world-level singletons; see ContextRegistry for the Set/Init/Override verb semantics
+        template <typename T>
+        T &SetContext(T value) { return m_contexts.Set(std::move(value)); }
+        template <typename T>
+        T &InitContext(T value) { return m_contexts.Init(std::move(value)); }
+        template <typename T>
+        T &OverrideContext(T value) { return m_contexts.Override(std::move(value)); }
+        template <typename T>
+        T &GetContext() { return m_contexts.Get<T>(); }
+        template <typename T>
+        const T &GetContext() const { return m_contexts.Get<T>(); }
+        template <typename T>
+        T *TryGetContext() { return m_contexts.TryGet<T>(); }
+        template <typename T>
+        const T *TryGetContext() const { return m_contexts.TryGet<T>(); }
+        template <typename T>
+        bool HasContext() const { return m_contexts.Has<T>(); }
+        void FreezeContexts() { m_contexts.Freeze(); }
+        bool ContextsFrozen() const { return m_contexts.IsFrozen(); }
+
         void Validate() const;
 
     private:
@@ -334,6 +355,7 @@ namespace engine
         std::vector<EntityLocation> m_locations;                                        // entity index -> location
         std::unordered_map<uint32_t, std::unique_ptr<ISparseStorage>> m_sparseStorages; // seq -> storage
         ComponentRegistry m_components;
+        ContextRegistry m_contexts;
         uint32_t m_currentTick = 1;                                                     // 0 reserved for never stamped
         uint32_t m_structuralVersion = 0;                                               // bumped on any relocation; Mut<T> captures it to detect dangling
         bool m_inHook = false;                                                          // re-entrancy guard: hook-initiated structural change is forbidden

@@ -14,6 +14,7 @@ add_executable(core_tests
     core/SparseStorageTest.cpp
     core/ComponentRegistryTest.cpp
     core/ComponentHookTest.cpp
+    core/WorldContextTest.cpp
     core/WorldTest.cpp
     core/ChangeDetectionTest.cpp
     core/QueryTest.cpp
