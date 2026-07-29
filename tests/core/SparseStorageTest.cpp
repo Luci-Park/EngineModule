@@ -116,6 +116,37 @@ TEST_CASE("SparseStorage Insert of a null entity is a safe no-op", "[core][ecs][
     storage.Validate();
 }
 
+TEST_CASE("SparseStorage InsertRaw through ISparseStorage is observable via typed Get", "[core][ecs][storage]")
+{
+    SparseStorage<Velocity> storage;
+    ISparseStorage          &erased = storage;
+    Entity                   e = MakeEntity(2);
+
+    Velocity value{7.0f};
+    erased.InsertRaw(e, &value, ComponentMeta{1, 2});
+
+    REQUIRE(storage.Contains(e));
+    REQUIRE(storage.Get(e)->m_dx == 7.0f);
+
+    Velocity overwrite{8.0f};
+    erased.InsertRaw(e, &overwrite, ComponentMeta{3, 4});
+
+    REQUIRE(storage.Size() == 1); // overwrite preserves the dense slot
+    REQUIRE(storage.Get(e)->m_dx == 8.0f);
+}
+
+TEST_CASE("SparseStorage MetaFor returns nullptr for an absent entity", "[core][ecs][storage]")
+{
+    SparseStorage<Velocity> storage;
+    ISparseStorage          &erased = storage;
+
+    REQUIRE(erased.MetaFor(MakeEntity(42)) == nullptr);
+
+    Entity e = MakeEntity(1);
+    storage.Insert(e, Velocity{1.0f}, ComponentMeta{9, 9});
+    REQUIRE(erased.MetaFor(e)->m_changedTick == 9);
+}
+
 TEST_CASE("SparseStorage property: N random Insert/Remove preserve invariants", "[core][ecs][storage]")
 {
     SparseStorage<Velocity>      storage;

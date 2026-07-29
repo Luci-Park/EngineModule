@@ -104,11 +104,11 @@ TEST_CASE("ComponentInfo::m_makeSparseStorage builds an empty storage", "[core][
 TEST_CASE("ComponentRegistry Register is idempotent and returns the same record", "[core][ecs][component-registry]")
 {
     ComponentRegistry registry;
-    const ComponentInfo &first = registry.Register<Position>();
+    const ComponentInfo *first = registry.Register<Position>();
     REQUIRE(registry.Size() == 1);
 
-    const ComponentInfo &second = registry.Register<Position>();
-    REQUIRE(&first == &second);
+    const ComponentInfo *second = registry.Register<Position>();
+    REQUIRE(first == second);
     REQUIRE(registry.Size() == 1);
     registry.Validate();
 }
@@ -147,12 +147,12 @@ TEST_CASE("ComponentRegistry IsFrozen reflects Freeze; re-registering a known ty
     ComponentRegistry registry;
     REQUIRE_FALSE(registry.IsFrozen());
 
-    const ComponentInfo &before = registry.Register<Position>();
+    const ComponentInfo *before = registry.Register<Position>();
     registry.Freeze();
     REQUIRE(registry.IsFrozen());
 
-    const ComponentInfo &after = registry.Register<Position>();
-    REQUIRE(&before == &after);
+    const ComponentInfo *after = registry.Register<Position>();
+    REQUIRE(before == after);
     REQUIRE(registry.Size() == 1);
     registry.Validate();
 }

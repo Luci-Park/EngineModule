@@ -162,8 +162,8 @@ TEST_CASE("ContextRegistry Has and TryGet are false/null before install, true/no
 TEST_CASE("ContextRegistry Set returns a reference that aliases the stored value", "[core][ecs][context]")
 {
     ContextRegistry registry;
-    Config &ref = registry.Set(Config{1});
-    ref.m_value = 99;
+    Config *ref = registry.Set(Config{1});
+    ref->m_value = 99;
 
     REQUIRE(registry.Get<Config>().m_value == 99);
     registry.Validate();
@@ -209,10 +209,10 @@ TEST_CASE("ContextRegistry const Get/TryGet see the same value as the mutable ac
 TEST_CASE("ContextRegistry Init on an absent type installs normally", "[core][ecs][context]")
 {
     ContextRegistry registry;
-    Config &ref = registry.Init(Config{4});
+    Config *ref = registry.Init(Config{4});
 
     REQUIRE(registry.Has<Config>());
-    REQUIRE(ref.m_value == 4);
+    REQUIRE(ref->m_value == 4);
     REQUIRE(registry.Get<Config>().m_value == 4);
     registry.Validate();
 }
@@ -222,9 +222,9 @@ TEST_CASE("ContextRegistry Init on a present type is a no-op returning the exist
     ContextRegistry registry;
     registry.Set(Config{1});
 
-    Config &ref = registry.Init(Config{999}); // discarded; existing value must survive
+    Config *ref = registry.Init(Config{999}); // discarded; existing value must survive
 
-    REQUIRE(ref.m_value == 1);
+    REQUIRE(ref->m_value == 1);
     REQUIRE(registry.Get<Config>().m_value == 1);
     REQUIRE(registry.Size() == 1);
     registry.Validate();
@@ -233,10 +233,10 @@ TEST_CASE("ContextRegistry Init on a present type is a no-op returning the exist
 TEST_CASE("ContextRegistry Override on an absent type installs normally", "[core][ecs][context]")
 {
     ContextRegistry registry;
-    Config &ref = registry.Override(Config{6});
+    Config *ref = registry.Override(Config{6});
 
     REQUIRE(registry.Has<Config>());
-    REQUIRE(ref.m_value == 6);
+    REQUIRE(ref->m_value == 6);
     registry.Validate();
 }
 
@@ -258,18 +258,18 @@ TEST_CASE("ContextRegistry Set/Init/Override all return a reference aliasing wha
 {
     {
         ContextRegistry registry;
-        Config &ref = registry.Set(Config{10});
-        REQUIRE(&ref == &registry.Get<Config>());
+        Config *ref = registry.Set(Config{10});
+        REQUIRE(ref == &registry.Get<Config>());
     }
     {
         ContextRegistry registry;
-        Config &ref = registry.Init(Config{20});
-        REQUIRE(&ref == &registry.Get<Config>());
+        Config *ref = registry.Init(Config{20});
+        REQUIRE(ref == &registry.Get<Config>());
     }
     {
         ContextRegistry registry;
-        Config &ref = registry.Override(Config{30});
-        REQUIRE(&ref == &registry.Get<Config>());
+        Config *ref = registry.Override(Config{30});
+        REQUIRE(ref == &registry.Get<Config>());
     }
 }
 
@@ -373,9 +373,9 @@ TEST_CASE("ContextRegistry Init on a present type is still a no-op after Freeze"
     registry.Set(Config{1});
     registry.Freeze();
 
-    Config &ref = registry.Init(Config{999});
+    Config *ref = registry.Init(Config{999});
 
-    REQUIRE(ref.m_value == 1);
+    REQUIRE(ref->m_value == 1);
     REQUIRE(registry.Get<Config>().m_value == 1);
     registry.Validate();
 }

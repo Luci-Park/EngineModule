@@ -10,6 +10,7 @@
 #pragma once
 #include <engine/core/core_export.h>
 #include <engine/core/ecs/Column.hpp>
+#include <engine/core/ecs/CommandBuffer.hpp>
 #include <engine/core/ecs/ComponentRegistry.hpp>
 #include <engine/core/ecs/ContextRegistry.hpp>
 #include <engine/core/ecs/Entity.hpp>
@@ -42,12 +43,11 @@ namespace engine
     {
     public:
         World();
-
-        // dllexport forces instantiation of implicit copy ops -> C2280 unless spelled out
+        // explicit delete to prevent forced instantiation due to dllexport
         World(const World &) = delete;
         World &operator=(const World &) = delete;
-        World(World &&) = default;
-        World &operator=(World &&) = default;
+        World(World &&) = delete;
+        World &operator=(World &&) = delete;
         ~World(); // fires every live entity's on_remove hooks; must stay a real destructor
 
         Entity Spawn();
@@ -69,121 +69,19 @@ namespace engine
         template <typename T>
         void AddComponent(Entity e, T value)
         {
-            ENGINE_ASSERT(!m_inHook, "World::AddComponent: hook-initiated structural change is forbidden");
             if (!m_entities.IsAlive(e))
                 return;
-
-            const ComponentInfo &info = m_components.Register<T>();
-            const uint32_t tick = m_currentTick;
-
-            if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
-            {
-                SparseStorage<T> &storage = GetOrCreateSparseStorage<T>();
-                if (auto entry = storage.Find(e); entry.m_value != nullptr)
-                {
-                    // overwrite: on_remove sees the outgoing value, on_add the incoming one,
-                    // at the same address; m_addedTick is deliberately untouched (decision A)
-                    FireOnRemove(info, e, entry.m_value);
-                    *entry.m_value = std::move(value);
-                    entry.m_meta->m_changedTick = tick; // preserve m_addedTick
-                    FireOnAdd(info, e, entry.m_value);
-                }
-                else
-                {
-                    storage.Insert(e, std::move(value), ComponentMeta{tick, tick});
-                    ++m_structuralVersion; // new sparse component; invalidates live Mut<T>s
-                    FireOnAdd(info, e, storage.Get(e));
-                }
-            }
-            else
-            {
-                const EntityLocation loc = m_locations[e.m_index];
-                Archetype &srcArchetype = *m_archetypes[loc.m_archetypeId];
-
-                if (Column<T> *existing = srcArchetype.m_table.GetColumn<T>())
-                {
-                    T *data = &existing->Get(loc.m_row);
-                    FireOnRemove(info, e, data); // overwrite pair, see the sparse branch above
-                    *data = std::move(value);
-                    existing->Meta(loc.m_row).m_changedTick = tick; // preserve m_addedTick
-                    FireOnAdd(info, e, data);
-                    return; // overwrite in place; no structural change
-                }
-
-                const uint32_t dstId = FindOrCreateArchetypeForAdd(loc.m_archetypeId, info.m_seq);
-
-                // archetype creation may reallocate m_archetypes -> re-fetch both
-                Archetype &src = *m_archetypes[loc.m_archetypeId];
-                Archetype &dst = *m_archetypes[dstId];
-
-                const Entity displaced = src.m_table.MoveRowTo(loc.m_row, dst.m_table);
-                ++m_structuralVersion; // archetype transition; invalidates live Mut<T>s. fires no hooks: T is new here, every other column just relocates
-                Column<T> *dstColumn = dst.m_table.GetColumn<T>();
-                dstColumn->Push(std::move(value), ComponentMeta{tick, tick});
-
-                EntityLocation &newLoc = m_locations[e.m_index];
-                newLoc.m_archetypeId = dstId;
-                newLoc.m_row = static_cast<uint32_t>(dst.m_table.RowCount() - 1);
-                if (!displaced.IsNull())
-                    m_locations[displaced.m_index].m_row = loc.m_row;
-
-                FireOnAdd(info, e, &dstColumn->Get(newLoc.m_row));
-            }
+            const ComponentInfo *info = m_components.Register<T>();
+            if (info == nullptr) // frozen absent-type violation; already asserted/logged in Register
+                return;
+            AddErased(*info, e, &value);
         }
 
         // Remove-absent / dead-entity = safe no-op
         template <typename T>
         void RemoveComponent(Entity e)
         {
-            ENGINE_ASSERT(!m_inHook, "World::RemoveComponent: hook-initiated structural change is forbidden");
-            if (!m_entities.IsAlive(e))
-                return;
-
-            // no Register<T> here: removal only drops an existing column, no record needed; a
-            // defensive remove of a never-added type would otherwise trip the frozen assert for nothing
-            const uint32_t seq = TypeIdOf<T>().m_seq;
-
-            if constexpr (ComponentStorageKind<T>::VALUE == StorageKind::SparseSet)
-            {
-                if (ISparseStorage *storage = FindSparseStorage(seq))
-                {
-                    // DataFor also proves presence; Remove()'s own Contains() check runs again,
-                    // but a hook needs the data pointer before the row is gone, so one extra
-                    // lookup here is unavoidable (see plan 08, chunk 2 notes)
-                    if (void *data = storage->DataFor(e); data != nullptr)
-                    {
-                        if (const ComponentInfo *info = m_components.Find(seq))
-                            FireOnRemove(*info, e, data);
-                        storage->Remove(e);
-                        ++m_structuralVersion; // actually removed; invalidates live Mut<T>s
-                    }
-                }
-            }
-            else
-            {
-                const EntityLocation loc = m_locations[e.m_index];
-                Column<T> *column = m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>();
-                if (column == nullptr)
-                    return;
-
-                if (const ComponentInfo *info = m_components.Find(seq))
-                    FireOnRemove(*info, e, &column->Get(loc.m_row)); // before MoveRowTo; data still in place
-
-                const uint32_t dstId = FindOrCreateArchetypeForRemove(loc.m_archetypeId, seq);
-
-                // archetype creation may reallocate m_archetypes -> re-fetch both
-                Archetype &src = *m_archetypes[loc.m_archetypeId];
-                Archetype &dst = *m_archetypes[dstId];
-
-                const Entity displaced = src.m_table.MoveRowTo(loc.m_row, dst.m_table);
-                ++m_structuralVersion; // archetype transition; invalidates live Mut<T>s
-
-                EntityLocation &newLoc = m_locations[e.m_index];
-                newLoc.m_archetypeId = dstId;
-                newLoc.m_row = static_cast<uint32_t>(dst.m_table.RowCount() - 1);
-                if (!displaced.IsNull())
-                    m_locations[displaced.m_index].m_row = loc.m_row;
-            }
+            RemoveErased(TypeIdOf<T>().m_seq, e);
         }
 
         // reads only; Mut<T> via GetComponentMut/Query is the sole write path
@@ -201,6 +99,8 @@ namespace engine
             else
             {
                 const EntityLocation &loc = m_locations[e.m_index];
+                if (loc.m_archetypeId == INVALID_ARCHETYPE_ID)
+                    return nullptr; // unplaced: no table components yet
                 Column<T> *column = m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>();
                 return column == nullptr ? nullptr : &column->Get(loc.m_row);
             }
@@ -220,6 +120,8 @@ namespace engine
             else
             {
                 const EntityLocation &loc = m_locations[e.m_index];
+                if (loc.m_archetypeId == INVALID_ARCHETYPE_ID)
+                    return false; // unplaced: no table components yet
                 return m_archetypes[loc.m_archetypeId]->m_table.HasColumn(TypeIdOf<T>().m_seq);
             }
         }
@@ -250,6 +152,8 @@ namespace engine
             else
             {
                 const EntityLocation &loc = m_locations[e.m_index];
+                if (loc.m_archetypeId == INVALID_ARCHETYPE_ID)
+                    return std::nullopt; // unplaced: no table components yet
                 Column<T> *column = m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>();
                 if (column == nullptr)
                     return std::nullopt;
@@ -274,48 +178,92 @@ namespace engine
             else
             {
                 const EntityLocation &loc = m_locations[e.m_index];
+                if (loc.m_archetypeId == INVALID_ARCHETYPE_ID)
+                    return nullptr; // unplaced: no table components yet
                 Column<T> *column = m_archetypes[loc.m_archetypeId]->m_table.GetColumn<T>();
                 return column == nullptr ? nullptr : &column->Meta(loc.m_row);
             }
         }
 
+        // nullptr only on a frozen absent-type violation; already asserted/logged in Register
         template <typename T>
-        const ComponentInfo &RegisterComponent() { return m_components.Register<T>(); }
+        const ComponentInfo *RegisterComponent() { return m_components.Register<T>(); }
         const ComponentInfo *FindComponentInfo(uint32_t seq) const { return m_components.Find(seq); }
         void FreezeComponents() { m_components.Freeze(); }
         bool ComponentsFrozen() const { return m_components.IsFrozen(); }
 
+        // nullptr only on a frozen violation; already asserted/logged in SetHooks
         template <typename T>
-        void SetComponentHooks(void (*onAdd)(World &, Entity, void *) noexcept, void (*onRemove)(World &, Entity, void *) noexcept)
+        const ComponentInfo *SetComponentHooks(void (*onAdd)(World &, Entity, void *) noexcept, void (*onRemove)(World &, Entity, void *) noexcept)
         {
-            m_components.SetHooks<T>(onAdd, onRemove);
+            return m_components.SetHooks<T>(onAdd, onRemove);
         }
 
-        // world-level singletons; see ContextRegistry for the Set/Init/Override verb semantics
+        // world-level singletons; see ContextRegistry for the Set/Init/Override verb semantics.
+        // nullptr only on a collision (Set) or frozen absent-type violation; already asserted/logged
         template <typename T>
-        T &SetContext(T value) { return m_contexts.Set(std::move(value)); }
+        T *SetContext(T value) { return m_contexts.Set(std::move(value)); }
         template <typename T>
-        T &InitContext(T value) { return m_contexts.Init(std::move(value)); }
+        T *InitContext(T value) { return m_contexts.Init(std::move(value)); }
         template <typename T>
-        T &OverrideContext(T value) { return m_contexts.Override(std::move(value)); }
+        T *OverrideContext(T value) { return m_contexts.Override(std::move(value)); }
         template <typename T>
-        T &GetContext() { return m_contexts.Get<T>(); }
+        T &GetContext()
+        {
+            ENGINE_ASSERT(!(m_inFixedMain && TypeIdOf<T>().m_seq == m_fixedForbiddenContextSeq),
+                          "read FixedTime inside FixedMain, not Time");
+            return m_contexts.Get<T>();
+        }
         template <typename T>
-        const T &GetContext() const { return m_contexts.Get<T>(); }
+        const T &GetContext() const
+        {
+            ENGINE_ASSERT(!(m_inFixedMain && TypeIdOf<T>().m_seq == m_fixedForbiddenContextSeq),
+                          "read FixedTime inside FixedMain, not Time");
+            return m_contexts.Get<T>();
+        }
         template <typename T>
-        T *TryGetContext() { return m_contexts.TryGet<T>(); }
+        T *TryGetContext()
+        {
+            ENGINE_ASSERT(!(m_inFixedMain && TypeIdOf<T>().m_seq == m_fixedForbiddenContextSeq),
+                          "read FixedTime inside FixedMain, not Time");
+            return m_contexts.TryGet<T>();
+        }
         template <typename T>
-        const T *TryGetContext() const { return m_contexts.TryGet<T>(); }
+        const T *TryGetContext() const
+        {
+            ENGINE_ASSERT(!(m_inFixedMain && TypeIdOf<T>().m_seq == m_fixedForbiddenContextSeq),
+                          "read FixedTime inside FixedMain, not Time");
+            return m_contexts.TryGet<T>();
+        }
         template <typename T>
         bool HasContext() const { return m_contexts.Has<T>(); }
         void FreezeContexts() { m_contexts.Freeze(); }
         bool ContextsFrozen() const { return m_contexts.IsFrozen(); }
 
+        CommandBuffer &Commands() { return m_commands; }
+        void FlushCommands();
+
         void Validate() const;
+
+        bool IsIterating() const { return m_iterationDepth != 0; }
+
+        void SetInFixedMain(bool active) { m_inFixedMain = active; }
+        bool InFixedMain() const { return m_inFixedMain; }
+        void SetFixedForbiddenContext(uint32_t seq) { m_fixedForbiddenContextSeq = seq; }
 
     private:
         template <typename... Ps>
         friend class Query;
+        friend class CommandBuffer; // Spawn/AddComponent/RemoveComponent call ReserveEntity/RegisterComponent
+
+        static constexpr uint32_t NO_FORBIDDEN_CONTEXT = UINT32_MAX; // seq 0 is a valid seq
+
+        void EnterIteration() { ++m_iterationDepth; }
+        void ExitIteration()
+        {
+            ENGINE_ASSERT(m_iterationDepth != 0, "World::ExitIteration: underflow");
+            --m_iterationDepth;
+        }
 
         struct Archetype
         {
@@ -339,14 +287,18 @@ namespace engine
         void FireOnRemove(const ComponentInfo &info, Entity e, void *data);
         void FireRemoveHooksForEntity(Entity e);
 
-        template <typename T>
-        SparseStorage<T> &GetOrCreateSparseStorage()
+        void AddErased(const ComponentInfo &info, Entity e, const void *payload);
+        void RemoveErased(uint32_t seq, Entity e);
+
+        Entity ReserveEntity();             // identity only, no placement; INVALID_ARCHETYPE_ID
+        void PlaceReservedEntity(Entity e); // flush-time: put a reserved entity in the empty archetype
+
+        ISparseStorage &GetOrCreateSparseStorage(const ComponentInfo &info)
         {
-            const ComponentInfo &info = m_components.Register<T>();
             auto it = m_sparseStorages.find(info.m_seq);
             if (it == m_sparseStorages.end())
                 it = m_sparseStorages.emplace(info.m_seq, info.m_makeSparseStorage()).first;
-            return static_cast<SparseStorage<T> &>(*it->second);
+            return *it->second;
         }
 
         EntityAllocator m_entities;
@@ -356,8 +308,39 @@ namespace engine
         std::unordered_map<uint32_t, std::unique_ptr<ISparseStorage>> m_sparseStorages; // seq -> storage
         ComponentRegistry m_components;
         ContextRegistry m_contexts;
-        uint32_t m_currentTick = 1;                                                     // 0 reserved for never stamped
-        uint32_t m_structuralVersion = 0;                                               // bumped on any relocation; Mut<T> captures it to detect dangling
-        bool m_inHook = false;                                                          // re-entrancy guard: hook-initiated structural change is forbidden
+        uint32_t m_currentTick = 1;                                 // 0 reserved for never stamped
+        uint32_t m_structuralVersion = 0;                           // bumped on any relocation; Mut<T> captures it to detect dangling
+        bool m_inHook = false;                                      // re-entrancy guard: hook-initiated structural change is forbidden
+        std::size_t m_unplacedCount = 0;                            // alive but INVALID_ARCHETYPE_ID; Validate() reconciles against EntityCount()
+        uint32_t m_iterationDepth = 0;                              // raised by Query::Iterator; depth not bool, nested queries must nest
+        bool m_inFixedMain = false;                                 // FixedMain driver brackets its sub-loop
+        uint32_t m_fixedForbiddenContextSeq = NO_FORBIDDEN_CONTEXT; // Time's seq, registered by Schedule::Start
+        CommandBuffer m_commands;                                   // constructed last: needs *this, already fully formed
     };
+
+    // CommandBuffer's templated record methods need the complete World (RegisterComponent<T>,
+    // ReserveEntity), which CommandBuffer.hpp cannot have (World.hpp includes CommandBuffer.hpp,
+    // not the reverse) -> defined here, after World closes, same reasoning as Mut<T> (section 12)
+    template <typename T>
+    void CommandBuffer::AddComponent(Entity e, T value)
+    {
+        ENGINE_ASSERT(!m_world->m_inHook,
+                      "CommandBuffer::AddComponent: hook-initiated structural change is forbidden");
+
+        const ComponentInfo *info = m_world->RegisterComponent<T>();
+        if (info == nullptr) // frozen absent-type violation; already asserted/logged in Register
+            return;
+        void *slot = Bump(sizeof(T), alignof(T));
+        new (slot) T(std::move(value)); // arena holds a live T; PushRaw/InsertRaw read it as one
+        m_commands.push_back(Command{CommandKind::Add, info->m_seq, e, slot});
+    }
+
+    template <typename T>
+    void CommandBuffer::RemoveComponent(Entity e)
+    {
+        ENGINE_ASSERT(!m_world->m_inHook,
+                      "CommandBuffer::RemoveComponent: hook-initiated structural change is forbidden");
+
+        m_commands.push_back(Command{CommandKind::Remove, TypeIdOf<T>().m_seq, e, nullptr});
+    }
 }

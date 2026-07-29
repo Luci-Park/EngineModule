@@ -18,6 +18,9 @@ add_executable(core_tests
     core/WorldTest.cpp
     core/ChangeDetectionTest.cpp
     core/QueryTest.cpp
+    core/CommandBufferTest.cpp
+    core/ScheduleTest.cpp
+    core/StageGraphTest.cpp
 )
 
 target_link_libraries(core_tests PRIVATE engine::core Catch2::Catch2WithMain)

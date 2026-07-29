@@ -93,6 +93,29 @@ TEST_CASE("Column CloneEmpty yields an empty same-seq column", "[core][ecs][stor
     REQUIRE(clone->ComponentSeq() == column.ComponentSeq());
 }
 
+TEST_CASE("Column PushRaw through IColumn produces a row readable by the typed Get", "[core][ecs][storage]")
+{
+    Column<Position> column;
+    IColumn         &erased = column;
+
+    Position value{4.0f};
+    erased.PushRaw(&value, ComponentMeta{5, 6});
+
+    REQUIRE(column.Size() == 1);
+    REQUIRE(column.Get(0).m_x == 4.0f);
+    REQUIRE(column.Meta(0).m_changedTick == 5);
+    REQUIRE(column.Meta(0).m_addedTick == 6);
+}
+
+TEST_CASE("Column MetaAt returns the same object as Meta", "[core][ecs][storage]")
+{
+    Column<Position> column;
+    column.Push(Position{1.0f}, ComponentMeta{2, 3});
+
+    IColumn &erased = column;
+    REQUIRE(&erased.MetaAt(0) == &column.Meta(0));
+}
+
 TEST_CASE("Column keeps data and meta parallel across a sequence of removes", "[core][ecs][storage]")
 {
     Column<Position> column;

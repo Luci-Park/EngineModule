@@ -27,42 +27,51 @@ namespace engine
 
         // holds unique_ptr (move-only) and is dllexport'd: forced instantiation of the
         // implicit copy ops would fail (C2280) unless spelled out
+        // move ops are deleted, not defaulted (unit 10, chunk 6): a defaulted move-assign
+        // drops the destination's contexts without reverse-order TearDown()
         ContextRegistry(const ContextRegistry &) = delete;
         ContextRegistry &operator=(const ContextRegistry &) = delete;
-        ContextRegistry(ContextRegistry &&) = default;
-        ContextRegistry &operator=(ContextRegistry &&) = default;
+        ContextRegistry(ContextRegistry &&) = delete;
+        ContextRegistry &operator=(ContextRegistry &&) = delete;
         ~ContextRegistry(); // TearDown(): reverse install order
 
         // present -> assert. "I provide this; a clash is a bug". see InitContext/OverrideContext
         // for the other two install verbs (decision B); each declares intent, none infers it
+        // returns nullptr on collision (already installed) or on a frozen absent-type
+        // violation (see InstallNew); callers must check before deref
         template <typename T>
-        T &Set(T value)
+        T *Set(T value)
         {
             const uint32_t seq = TypeIdOf<T>().m_seq;
             auto it = m_contexts.find(seq);
-            ENGINE_ASSERT(it == m_contexts.end(), "ContextRegistry::Set: T is already installed; use InitContext or OverrideContext");
             if (it != m_contexts.end())
-                return static_cast<ContextHolder<T> &>(*it->second).m_value;
+            {
+                ENGINE_ASSERT(false, "ContextRegistry::Set: T is already installed; use InitContext or OverrideContext");
+                ENGINE_LOG_ERROR("ContextRegistry::Set: T already installed; rejecting new value");
+                return nullptr;
+            }
             return InstallNew(seq, std::move(value));
         }
 
         // present -> no-op, returns the EXISTING value; the passed-in one is discarded.
         // "provide a default unless someone already did", per DefaultPlugins
+        // returns nullptr only on a frozen absent-type violation (see InstallNew)
         template <typename T>
-        T &Init(T value)
+        T *Init(T value)
         {
             const uint32_t seq = TypeIdOf<T>().m_seq;
             auto it = m_contexts.find(seq);
             if (it != m_contexts.end())
-                return static_cast<ContextHolder<T> &>(*it->second).m_value;
+                return &static_cast<ContextHolder<T> &>(*it->second).m_value;
             return InstallNew(seq, std::move(value));
         }
 
         // present -> replace, running the old value's dtor; KEEPS the type's install-order
         // position (decision B: "override" is the same slot with a different value, and moving
         // it would retroactively invalidate dependencies established at first install)
+        // returns nullptr only on a frozen absent-type violation (see InstallNew)
         template <typename T>
-        T &Override(T value)
+        T *Override(T value)
         {
             const uint32_t seq = TypeIdOf<T>().m_seq;
             auto it = m_contexts.find(seq);
@@ -74,7 +83,7 @@ namespace engine
             // no freeze check here: overriding a present type is legal forever, since the
             // freeze gates the type set, not values (decision C)
             it->second = std::make_unique<ContextHolder<T>>(std::move(value));
-            return static_cast<ContextHolder<T> &>(*it->second).m_value;
+            return &static_cast<ContextHolder<T> &>(*it->second).m_value;
         }
 
         template <typename T>
@@ -133,12 +142,17 @@ namespace engine
         // path). single frozen-check message rather than one per verb, since the three call
         // sites already say which verb asserted via ENGINE_ASSERT's own file/line output
         template <typename T>
-        T &InstallNew(uint32_t seq, T value)
+        T *InstallNew(uint32_t seq, T value)
         {
-            ENGINE_ASSERT(!m_frozen, "ContextRegistry: cannot install a new context type after Freeze()");
+            if (m_frozen)
+            {
+                ENGINE_ASSERT(false, "ContextRegistry: cannot install a new context type after Freeze()");
+                ENGINE_LOG_ERROR("ContextRegistry: rejecting new context type installed after Freeze()");
+                return nullptr;
+            }
             auto it = m_contexts.emplace(seq, std::make_unique<ContextHolder<T>>(std::move(value))).first;
             m_installOrder.push_back(seq);
-            return static_cast<ContextHolder<T> &>(*it->second).m_value;
+            return &static_cast<ContextHolder<T> &>(*it->second).m_value;
         }
 
         std::unordered_map<uint32_t, std::unique_ptr<IContext>> m_contexts;

@@ -11,10 +11,12 @@ engine_add_module(core
     src/memory/LinearAllocator.cpp
     src/memory/PoolAllocator.cpp
     src/profile/Profile.cpp
+    src/ecs/CommandBuffer.cpp
     src/ecs/ComponentRegistry.cpp
     src/ecs/ContextRegistry.cpp
     src/ecs/EntityAllocator.cpp
     src/ecs/World.cpp
+    src/schedule/Schedule.cpp
 )
 engine_apply_sanitizers(engine_core)
 if(MSVC)

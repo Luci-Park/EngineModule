@@ -133,8 +133,7 @@ namespace engine
                     }
                 }
                 const char c = raw[i];
-                // drop every space except between two word chars; that is what makes
-                // MSVC and GCC/Clang spelling converge
+
                 if (c == ' ')
                 {
                     const bool nextWord = (i + 1 < raw.size()) && IsWordChar(raw[i + 1]);
@@ -149,8 +148,6 @@ namespace engine
             return n;
         }
 
-        // offset of the bare name: past the last "::" at angle-bracket depth 0
-        // (a "::" inside template args belongs to an argument, not to the outer type)
         constexpr std::size_t BareNameOffset(std::string_view normalized)
         {
             std::size_t offset = 0;
@@ -167,7 +164,7 @@ namespace engine
             return offset;
         }
 
-        // per-type static storage for the normalized name (string_views point into this)
+        // name static storage(string_views)
         template <typename T>
         struct TypeNameOf
         {

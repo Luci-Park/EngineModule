@@ -31,6 +31,8 @@ namespace engine
         virtual Entity DenseEntityAt(std::size_t denseIndex) const = 0;
         virtual void Validate() const = 0;
         virtual void *DataFor(Entity e) = 0; // type-erased component bytes for hooks, nullptr if absent
+        virtual void InsertRaw(Entity e, const void *src, ComponentMeta meta) = 0;
+        virtual ComponentMeta *MetaFor(Entity e) = 0; // nullptr if absent; erased twin of Meta(Entity)
     };
 
     template <typename T>
@@ -146,6 +148,13 @@ namespace engine
         }
 
         void *DataFor(Entity e) override { return Get(e); }
+
+        void InsertRaw(Entity e, const void *src, ComponentMeta meta) override
+        {
+            Insert(e, *static_cast<const T *>(src), meta);
+        }
+
+        ComponentMeta *MetaFor(Entity e) override { return Meta(e); }
 
         void Validate() const override
         {

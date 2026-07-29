@@ -215,6 +215,26 @@ namespace engine
         class Iterator
         {
         public:
+            Iterator(const Iterator &other)
+                : m_query(other.m_query), m_archetypeIdx(other.m_archetypeIdx), m_row(other.m_row)
+            {
+                Recount();
+            }
+
+            Iterator &operator=(const Iterator &other)
+            {
+                if (this == &other)
+                    return *this;
+                Release(); // may be a different Query, so release before adopting
+                m_query = other.m_query;
+                m_archetypeIdx = other.m_archetypeIdx;
+                m_row = other.m_row;
+                Recount();
+                return *this;
+            }
+
+            ~Iterator() { Release(); }
+
             ValueType operator*() const
             {
                 Table &table = m_query->ArchetypeAt(m_archetypeIdx).m_table;
@@ -252,9 +272,11 @@ namespace engine
             Iterator(Query *query, std::size_t archetypeIdx, std::size_t row)
                 : m_query(query), m_archetypeIdx(archetypeIdx), m_row(row)
             {
+                // no Recount() here: this ctor also builds the provisional (0,0) MakeBegin
+                // position, which SkipToValid has not yet validated against RowMatches
             }
 
-            void SkipToValid()
+            void AdvanceToValid()
             {
                 while (m_archetypeIdx < m_query->m_matched.size())
                 {
@@ -276,9 +298,38 @@ namespace engine
                 m_row = 0;
             }
 
+            void SkipToValid()
+            {
+                AdvanceToValid();
+                Recount();
+            }
+
+            // guard counts only a row-positioned iterator: parking at end ends iteration, so a
+            // parked iterator still in scope must not pin the structural-change guard
+            void Recount()
+            {
+                const bool active = m_archetypeIdx != END_ARCHETYPE_IDX;
+                if (active == m_counted)
+                    return;
+                if (active)
+                    m_query->m_world->EnterIteration();
+                else
+                    m_query->m_world->ExitIteration();
+                m_counted = active;
+            }
+
+            void Release()
+            {
+                if (!m_counted)
+                    return;
+                m_query->m_world->ExitIteration();
+                m_counted = false;
+            }
+
             Query *m_query = nullptr;
             std::size_t m_archetypeIdx = 0;
             std::size_t m_row = 0;
+            bool m_counted = false;
         };
 
         // begin() refreshes so an archetype or sparse storage created after construction is not
@@ -293,6 +344,18 @@ namespace engine
         Iterator end()
         {
             return Iterator::MakeEnd(this);
+        }
+
+        // re-points a member query at its owning system's current tick, and refreshes at the same
+        // point so a newly created archetype or sparse storage is picked up together with it.
+        // asserts on iteration: Refresh() mutates m_matched, the same hazard that keeps end()
+        // from refreshing
+        void SetLastRunTick(uint32_t tick)
+        {
+            ENGINE_ASSERT(!m_world->IsIterating(),
+                          "Query::SetLastRunTick: refreshes the match list; call it before iterating");
+            m_lastRunTick = tick;
+            Refresh();
         }
 
         // iterates; test/debug convenience, not a hot-path API

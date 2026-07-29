@@ -6,7 +6,11 @@
 #include <engine/core/ecs/Entity.hpp>
 #include <engine/core/ecs/SparseStorage.hpp>
 #include <engine/core/ecs/StorageKind.hpp>
+#include <engine/core/ecs/TypeId.hpp>
 #include <engine/core/ecs/World.hpp>
+
+#include <cstdint>
+#include <vector>
 
 using namespace engine;
 
@@ -46,6 +50,12 @@ namespace
         int m_value = 0;
     };
 
+    // sparse-routed, hooked; second sparse type for the despawn-sweep ordering test
+    struct HookedSparse2
+    {
+        int m_value = 0;
+    };
+
     struct HookState
     {
         int m_addCount = 0;
@@ -60,6 +70,8 @@ namespace
     HookState g_tableHooks;
     HookState g_sparseHooks;
     HookState g_partialHooks;
+    HookState g_sparse2Hooks;
+    std::vector<uint32_t> g_removeOrder;
 
     // hooks reach state through contexts per the TDD hook contract; contexts don't exist until
     // unit 09, so these tests use namespace-scope counters instead (out of scope, see plan 08)
@@ -69,6 +81,8 @@ namespace
         g_tableHooks = HookState{};
         g_sparseHooks = HookState{};
         g_partialHooks = HookState{};
+        g_sparse2Hooks = HookState{};
+        g_removeOrder.clear();
     }
 
     void OnHookedTableAdd(World &, Entity, void *data) noexcept
@@ -97,6 +111,7 @@ namespace
         g_sparseHooks.m_removeCount++;
         g_sparseHooks.m_removeSeq = g_sequence++;
         g_sparseHooks.m_lastRemoveValue = static_cast<HookedSparse *>(data)->m_value;
+        g_removeOrder.push_back(TypeIdOf<HookedSparse>().m_seq);
     }
 
     void OnPartialRemove(World &, Entity, void *data) noexcept
@@ -104,10 +119,23 @@ namespace
         g_partialHooks.m_removeCount++;
         g_partialHooks.m_lastRemoveValue = static_cast<PartiallyHooked *>(data)->m_value;
     }
+
+    void OnHookedSparse2Remove(World &, Entity, void *data) noexcept
+    {
+        g_sparse2Hooks.m_removeCount++;
+        g_sparse2Hooks.m_lastRemoveValue = static_cast<HookedSparse2 *>(data)->m_value;
+        g_removeOrder.push_back(TypeIdOf<HookedSparse2>().m_seq);
+    }
 }
 
 template <>
 struct engine::ComponentStorageKind<HookedSparse>
+{
+    static constexpr StorageKind VALUE = StorageKind::SparseSet;
+};
+
+template <>
+struct engine::ComponentStorageKind<HookedSparse2>
 {
     static constexpr StorageKind VALUE = StorageKind::SparseSet;
 };
@@ -470,6 +498,36 @@ TEST_CASE("World destructor fires on_remove exactly once per live entity for a h
 
     REQUIRE(g_tableHooks.m_removeCount == 5);
     REQUIRE(g_sparseHooks.m_removeCount == 5);
+}
+
+TEST_CASE("World Despawn fires on_remove for two hooked sparse components in ascending-seq order, repeatably", "[core][ecs][hooks]")
+{
+    // unit 10, chunk 6: m_sparseStorages is unordered_map bucket order, so the sweep now sorts
+    // seqs before firing; run it a few times to catch any bucket-order dependence
+    const uint32_t seqA = TypeIdOf<HookedSparse>().m_seq;
+    const uint32_t seqB = TypeIdOf<HookedSparse2>().m_seq;
+    const std::vector<uint32_t> expected = seqA < seqB ? std::vector<uint32_t>{seqA, seqB}
+                                                        : std::vector<uint32_t>{seqB, seqA};
+
+    for (int run = 0; run < 3; ++run)
+    {
+        ResetHookState();
+        World world;
+        world.SetComponentHooks<HookedSparse>(OnHookedSparseAdd, OnHookedSparseRemove);
+        world.SetComponentHooks<HookedSparse2>(nullptr, OnHookedSparse2Remove);
+
+        Entity e = world.Spawn();
+        world.AddComponent(e, HookedSparse{1});
+        world.AddComponent(e, HookedSparse2{2});
+        ResetHookState();
+
+        world.Despawn(e);
+
+        REQUIRE(g_sparseHooks.m_removeCount == 1);
+        REQUIRE(g_sparse2Hooks.m_removeCount == 1);
+        REQUIRE(g_removeOrder == expected);
+        world.Validate();
+    }
 }
 
 TEST_CASE("World destructor of an empty world fires nothing", "[core][ecs][hooks]")

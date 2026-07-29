@@ -21,17 +21,23 @@ namespace engine
     class ENGINE_CORE_API ComponentRegistry
     {
     public:
-        // idempotent: an already-known T returns its existing record untouched
+        // idempotent: an already-known T returns its existing record untouched.
+        // returns nullptr only on a frozen absent-type violation; caller must check
         template <typename T>
-        const ComponentInfo &Register()
+        const ComponentInfo *Register()
         {
             const uint32_t seq = TypeIdOf<T>().m_seq;
             auto it = m_infos.find(seq);
             if (it != m_infos.end())
-                return it->second;
+                return &it->second;
 
-            ENGINE_ASSERT(!m_frozen, "ComponentRegistry::Register: registry is frozen, T is not already known");
-            return m_infos.emplace(seq, MakeComponentInfo<T>()).first->second;
+            if (m_frozen)
+            {
+                ENGINE_ASSERT(false, "ComponentRegistry::Register: registry is frozen, T is not already known");
+                ENGINE_LOG_ERROR("ComponentRegistry::Register: rejecting new type registered after freeze");
+                return nullptr;
+            }
+            return &m_infos.emplace(seq, MakeComponentInfo<T>()).first->second;
         }
 
         const ComponentInfo *Find(uint32_t seq) const;
@@ -44,14 +50,21 @@ namespace engine
         // so "T already has a record" says nothing about whether SetHooks itself ran before
         // init closed. delegates record creation to Register<T>() rather than reimplementing
         // find-or-insert here.
+        // returns nullptr only on a frozen absent-type violation; caller must check
         template <typename T>
-        void SetHooks(void (*onAdd)(World &, Entity, void *) noexcept, void (*onRemove)(World &, Entity, void *) noexcept)
+        const ComponentInfo *SetHooks(void (*onAdd)(World &, Entity, void *) noexcept, void (*onRemove)(World &, Entity, void *) noexcept)
         {
-            ENGINE_ASSERT(!m_frozen, "ComponentRegistry::SetHooks: hooks must be attached before the registry is frozen");
+            if (m_frozen)
+            {
+                ENGINE_ASSERT(false, "ComponentRegistry::SetHooks: hooks must be attached before the registry is frozen");
+                ENGINE_LOG_ERROR("ComponentRegistry::SetHooks: rejecting hooks attached after freeze");
+                return nullptr;
+            }
             Register<T>();
             ComponentInfo &info = m_infos.find(TypeIdOf<T>().m_seq)->second;
             info.m_onAdd = onAdd;
             info.m_onRemove = onRemove;
+            return &info;
         }
 
         template <typename T>
